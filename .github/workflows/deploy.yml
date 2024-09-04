@@ -32,5 +32,8 @@ jobs:
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # GitHub SecretsからAPIキーを取得して環境変数として設定
         GOOGLE_APPLICATION_CREDENTIALS: $HOME/gcloud-credentials.json  # Google Cloud認証情報のファイルパスを環境変数として設定
+    - name: Set up Google Cloud credentials
+      run: echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > $HOME/gcloud-credentials.json
+      
       run: |
         streamlit run main0904.py  # Streamlitアプリを起動
