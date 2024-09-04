@@ -28,3 +28,5 @@ jobs:
         GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}  # Google Cloud認証情報を環境変数に設定
       run: |
         streamlit run main0904.py  # Streamlitアプリを起動
+    - name:  Install ffmpeg
+      run: sudo apt-get install -y ffmpeg
