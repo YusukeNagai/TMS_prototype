@@ -18,6 +18,12 @@ jobs:
       with:
         python-version: '3.9'  # Python 3.9を使用
 
+    - name: Install ffmpeg
+      run: sudo apt-get install -y ffmpeg  # ffmpegのインストール
+
+    - name: Set up Google Cloud credentials
+      run: echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > $HOME/gcloud-credentials.json  # Google Cloud認証情報をファイルに書き出す
+
     - name: Install dependencies
       run: |
         pip install -r requirements.txt  # プロジェクトの依存パッケージをインストール
@@ -25,8 +31,6 @@ jobs:
     - name: Run Streamlit app
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # GitHub SecretsからAPIキーを取得して環境変数として設定
-        GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}  # Google Cloud認証情報を環境変数に設定
+        GOOGLE_APPLICATION_CREDENTIALS: $HOME/gcloud-credentials.json  # Google Cloud認証情報のファイルパスを環境変数として設定
       run: |
         streamlit run main0904.py  # Streamlitアプリを起動
-    - name:  Install ffmpeg
-      run: sudo apt-get install -y ffmpeg
