@@ -1,42 +1,48 @@
-name: Deploy Streamlit App
+name: Streamlit App Deployment
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-    
+    branches:
+      - main  # mainブランチにコードをプッシュしたときに自動実行される
+
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # GitHub ActionsはUbuntuの最新環境で動作する
 
     steps:
-    - uses: actions/checkout@v2
-
-    - name: Set up Python 3.11
+    - name: Checkout repository
+      uses: actions/checkout@v2  # リポジトリのコードをチェックアウト
+      
+    - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: 3.11
+        python-version: '3.9'  # Python 3.9を使用
+
+    - name: Install ffmpeg
+      run: sudo apt-get install -y ffmpeg  # ffmpegのインストール
+
+    # シークレットを使用してJSONファイルを作成
+    - name: create-json
+      id: create-json
+      uses: jsdaniell/create-json@v1.2.2
+      with:
+        name: "google_credentials.json"  # 作成するファイル名
+        json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}  # シークレットからJSONの内容を取得
+
+    - name: Install distutils
+      run: sudo apt-get install python3-distutils
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install streamlit google-cloud-speech openai wave
+        pip install -r requirements.txt  # プロジェクトの依存パッケージをインストール
 
-    - name: Create requirements.txt
-      run: pip freeze > requirements.txt
-
-    - name: Set up Google Cloud credentials
-      env:
-        GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-      run: |
-        echo "$GOOGLE_CREDENTIALS" > google_credentials.json
-        echo "GOOGLE_APPLICATION_CREDENTIALS=google_credentials.json" >> $GITHUB_ENV
-
-    - name: Set up OpenAI API key
-      env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      run: echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> $GITHUB_ENV
+    - name: Cache pip dependencies
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
 
     - name: Run Streamlit app
       env:
