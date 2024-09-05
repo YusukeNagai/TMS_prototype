@@ -12,7 +12,7 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2  # リポジトリのコードをチェックアウト
-
+      
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
