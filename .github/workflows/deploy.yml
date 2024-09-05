@@ -38,8 +38,9 @@ jobs:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> $GITHUB_ENV
 
-    - name: Deploy to Streamlit Cloud
-      uses: streamlit/streamlit-deploy-action@v1
-      with:
-        app-name: your-app-name-here
-        streamlit-api-key: ${{ secrets.STREAMLIT_API_KEY }}
+    - name: Run Streamlit app
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # GitHub SecretsからAPIキーを取得して環境変数として設定
+        GOOGLE_APPLICATION_CREDENTIALS: google_credentials.json  # 作成したGoogle Cloud認証情報ファイルのパスを設定
+      run: |
+        streamlit run main0904.py  # Streamlitアプリを起動
