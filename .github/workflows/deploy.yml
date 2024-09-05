@@ -32,11 +32,6 @@ jobs:
     - name: Install distutils
       run: sudo apt-get install python3-distutils
 
-    # setuptools のアップグレードを追加
-    - name: Upgrade setuptools
-      run: |
-        pip install --upgrade setuptools
-
     - name: Install dependencies
       run: |
         pip install -r requirements.txt  # プロジェクトの依存パッケージをインストール
