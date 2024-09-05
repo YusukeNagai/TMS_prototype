@@ -28,13 +28,12 @@ jobs:
       with:
         name: "google_credentials.json"  # 作成するファイル名
         json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}  # シークレットからJSONの内容を取得
-      GOOGLE_APPLICATION_CREDENTIALS: google_credentials.json
-        
+
     - name: Install dependencies
       run: |
         pip install -r requirements.txt  # プロジェクトの依存パッケージをインストール
 
-    - name: Cache pip dependencies  # ここでのインデントを修正
+    - name: Cache pip dependencies
       uses: actions/cache@v2
       with:
         path: ~/.cache/pip
@@ -42,11 +41,9 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-       
     - name: Run Streamlit app
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # GitHub SecretsからAPIキーを取得して環境変数として設定
         GOOGLE_APPLICATION_CREDENTIALS: google_credentials.json  # 作成したGoogle Cloud認証情報ファイルのパスを設定
-
       run: |
         streamlit run main0904.py  # Streamlitアプリを起動
