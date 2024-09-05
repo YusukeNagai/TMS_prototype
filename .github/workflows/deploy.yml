@@ -1,52 +1,51 @@
-name: Streamlit App Deployment
+name: Streamlit App CI/CD
 
 on:
   push:
-    branches:
-      - main  # mainブランチにコードをプッシュしたときに自動実行される
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest  # GitHub ActionsはUbuntuの最新環境で動作する
+  build-and-test:
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2  # リポジトリのコードをチェックアウト
-      
-    - name: Set up Python
+    - uses: actions/checkout@v2
+
+    - name: Set up Python 3.11
       uses: actions/setup-python@v2
       with:
-        python-version: '3.9'  # Python 3.9を使用
+        python-version: 3.11
 
     - name: Install ffmpeg
-      run: sudo apt-get install -y ffmpeg  # ffmpegのインストール
-
-    # シークレットを使用してJSONファイルを作成
-    - name: create-json
-      id: create-json
-      uses: jsdaniell/create-json@v1.2.2
-      with:
-        name: "google_credentials.json"  # 作成するファイル名
-        json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}  # シークレットからJSONの内容を取得
-
-    - name: Install distutils
-      run: sudo apt-get install python3-distutils
+      run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
     - name: Install dependencies
       run: |
-        pip install -r requirements.txt  # プロジェクトの依存パッケージをインストール
+        python -m pip install --upgrade pip
+        pip install streamlit google-cloud-speech openai wave
 
-    - name: Cache pip dependencies
-      uses: actions/cache@v2
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+    - name: Set up Google Cloud credentials
+      env:
+        GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+      run: |
+        echo "$GOOGLE_CREDENTIALS" > google_credentials.json
+        echo "GOOGLE_APPLICATION_CREDENTIALS=google_credentials.json" >> $GITHUB_ENV
+
+    - name: Set up OpenAI API key
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> $GITHUB_ENV
 
     - name: Run Streamlit app
-      env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # GitHub SecretsからAPIキーを取得して環境変数として設定
-        GOOGLE_APPLICATION_CREDENTIALS: google_credentials.json  # 作成したGoogle Cloud認証情報ファイルのパスを設定
-      run: |
-        streamlit run main0904.py  # Streamlitアプリを起動
+      run: streamlit run main0904.py &
+
+    - name: Wait for Streamlit to start
+      run: sleep 10
+
+    - name: Check if Streamlit is running
+      run: curl http://localhost:8501
+
+    - name: Stop Streamlit
+      run: pkill -f streamlit
