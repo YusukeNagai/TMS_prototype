@@ -1,97 +1,52 @@
-import os
-import wave
-import streamlit as st
-from google.cloud import speech
-import openai
+name: Streamlit App Deployment
 
-# OpenAI APIキーを環境変数から取得
-openai.api_key = os.getenv('OPENAI_API_KEY')
+on:
+  push:
+    branches:
+      - main  # mainブランチにコードをプッシュしたときに自動実行される
 
-# Google Cloud認証情報を環境変数から設定
-google_credentials = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+jobs:
+  deploy:
+    runs-on: ubuntu-latest  # GitHub ActionsはUbuntuの最新環境で動作する
 
-if google_credentials:
-    with open('google_credentials.json', 'w') as f:
-        f.write(google_credentials)
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'google_credentials.json'
-else:
-    st.error("Google Cloud credentials not found")
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2  # リポジトリのコードをチェックアウト
+      
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'  # Python 3.9を使用
 
-# MP3ファイルをWAVファイルに変換する関数
-def convert_mp3_to_wav(mp3_file_path, wav_file_path):
-    os.system(f'ffmpeg -i {mp3_file_path} {wav_file_path}')
+    - name: Install ffmpeg
+      run: sudo apt-get install -y ffmpeg  # ffmpegのインストール
 
-# 音声ファイルをチャンクに分割する関数
-def generate_audio_chunks(file_path, chunk_size=4096):
-    with open(file_path, 'rb') as audio_file:
-        while True:
-            chunk = audio_file.read(chunk_size)
-            if not chunk:
-                break
-            yield speech.StreamingRecognizeRequest(audio_content=chunk)
+    # シークレットを使用してJSONファイルを作成
+    - name: create-json
+      id: create-json
+      uses: jsdaniell/create-json@v1.2.2
+      with:
+        name: "google_credentials.json"  # 作成するファイル名
+        json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}  # シークレットからJSONの内容を取得
 
-# Streamlit アプリケーションの設定
-st.title('音声ファイルの処理と話題分類')
+    - name: Install distutils
+      run: sudo apt-get install python3-distutils
 
-uploaded_file = st.file_uploader("MP3ファイルをアップロード", type="mp3")
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt  # プロジェクトの依存パッケージをインストール
 
-if uploaded_file:
-    mp3_file_path = 'uploaded_file.mp3'
-    wav_file_path = 'uploaded_file.wav'
+    - name: Cache pip dependencies
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
 
-    with open(mp3_file_path, 'wb') as f:
-        f.write(uploaded_file.getvalue())
-
-    convert_mp3_to_wav(mp3_file_path, wav_file_path)
-
-    with wave.open(wav_file_path, 'rb') as f:
-        fr = f.getframerate()
-
-    st.write(f"サンプリングレート: {fr}")
-
-    client = speech.SpeechClient()
-    config = speech.RecognitionConfig(
-        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=fr,
-        language_code='ja-JP'
-    )
-    streaming_config = speech.StreamingRecognitionConfig(config=config)
-    requests = generate_audio_chunks(wav_file_path)
-    responses = client.streaming_recognize(config=streaming_config, requests=requests)
-
-    transcribed_text = ""
-    for response in responses:
-        for result in response.results:
-            transcribed_text += result.alternatives[0].transcript + '\n'
-
-    st.write("文字起こし結果:")
-    st.text_area("Transcribed Text", transcribed_text, height=300)
-
-    # 事前学習用ファイルのアップロード
-    try:
-        with open('前学習_介護用語リスト.txt', 'rb') as file:
-            file_metadata = openai.File.create(
-                file=file,
-                purpose='fine-tune'
-            )
-        file_id = file_metadata['id']
-    except Exception as e:
-        st.error(f"事前学習用ファイルのアップロードに失敗しました: {e}")
-        file_id = None
-
-    if file_id:
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": f"以下のテキストを分類してください。"},
-                    {"role": "user", "content": transcribed_text}
-                ]
-            )
-            topic_content = response['choices'][0]['message']['content'].strip()
-            topics = topic_content.split('\n')
-            st.write('分類された話題:')
-            for topic in topics:
-                st.write(f'- {topic}')
-        except Exception as e:
-            st.error(f"話題分類に失敗しました: {e}")
+    - name: Run Streamlit app
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # GitHub SecretsからAPIキーを取得して環境変数として設定
+        GOOGLE_APPLICATION_CREDENTIALS: google_credentials.json  # 作成したGoogle Cloud認証情報ファイルのパスを設定
+      run: |
+        streamlit run main0904.py  # Streamlitアプリを起動
