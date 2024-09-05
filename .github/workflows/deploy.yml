@@ -29,6 +29,9 @@ jobs:
         name: "google_credentials.json"  # 作成するファイル名
         json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}  # シークレットからJSONの内容を取得
 
+    - name: Install distutils
+      run: sudo apt-get install python3-distutils
+
     - name: Install dependencies
       run: |
         pip install -r requirements.txt  # プロジェクトの依存パッケージをインストール
