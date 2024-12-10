@@ -71,7 +71,7 @@ if uploaded_file:
     # 事前学習用ファイルのアップロード
     file_id = None  # 初期化
     try:
-        with open('前学習_介護用語リスト.jsonl', 'rb') as file:  # JSONLファイルを指定
+        with open('前学習_介護用語リスト .jsonl', 'rb') as file:  # JSONLファイルを指定
             file_metadata = openai.File.create(
                 file=file,
                 purpose='fine-tune'
