@@ -5,11 +5,11 @@ import streamlit as st
 from google.cloud import speech
 import openai
 
-# OpenAI APIキーを環境変数から取得
-openai.api_key = os.getenv('OPENAI_API_KEY')
+# OpenAI APIキーをStreamlit Secretsから取得
+openai.api_key = st.secrets["openai"]["api_key"]
 
 # Streamlit SecretsからGoogle Cloud認証情報を取得
-google_credentials_data = st.secrets["GOOGLE_CREDENTIALS"]
+google_credentials_data = st.secrets["google_credentials"]
 
 # JSONファイルとして書き出し
 with open('google_credentials.json', 'w') as f:
