@@ -11,7 +11,6 @@ openai.api_key = st.secrets["openai"]["api_key"]
 # Streamlit SecretsからGoogle Cloud認証情報を取得
 google_credentials_data = st.secrets["GOOGLE_CREDENTIALS"]
 
-
 # JSONファイルとして書き出し
 with open('google_credentials.json', 'w') as f:
     json.dump(dict(google_credentials_data), f)
@@ -71,15 +70,15 @@ if uploaded_file:
 
     # 事前学習用ファイルのアップロード
     try:
-        with open('前学習_介護用語リスト.txt', 'rb') as file:
+        with open('前学習_介護用語リスト.jsonl', 'rb') as file:  # JSONLファイルを指定
             file_metadata = openai.File.create(
                 file=file,
                 purpose='fine-tune'
             )
         file_id = file_metadata['id']
+        st.write(f"事前学習用ファイルをアップロードしました。ファイルID: {file_id}")
     except Exception as e:
         st.error(f"事前学習用ファイルのアップロードに失敗しました: {e}")
-        file_id = None
 
     if file_id:
         try:
