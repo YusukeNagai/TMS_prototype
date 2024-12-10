@@ -9,7 +9,8 @@ import openai
 openai.api_key = st.secrets["openai"]["api_key"]
 
 # Streamlit SecretsからGoogle Cloud認証情報を取得
-google_credentials_data = st.secrets["google_credentials"]
+google_credentials_data = st.secrets["GOOGLE_CREDENTIALS"]
+
 
 # JSONファイルとして書き出し
 with open('google_credentials.json', 'w') as f:
