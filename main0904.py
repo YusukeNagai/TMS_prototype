@@ -1,5 +1,6 @@
 import os
 import wave
+import json
 import streamlit as st
 from google.cloud import speech
 import openai
@@ -7,15 +8,15 @@ import openai
 # OpenAI APIキーを環境変数から取得
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
-# Google Cloud認証情報を環境変数から設定
-google_credentials = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+# Streamlit SecretsからGoogle Cloud認証情報を取得
+google_credentials_data = st.secrets["GOOGLE_CREDENTIALS"]
 
-if google_credentials:
-    with open('google_credentials.json', 'w') as f:
-        f.write(google_credentials)
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'google_credentials.json'
-else:
-    st.error("Google Cloud credentials not found")
+# JSONファイルとして書き出し
+with open('google_credentials.json', 'w') as f:
+    json.dump(dict(google_credentials_data), f)
+
+# 環境変数を設定
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'google_credentials.json'
 
 # MP3ファイルをWAVファイルに変換する関数
 def convert_mp3_to_wav(mp3_file_path, wav_file_path):
@@ -95,4 +96,3 @@ if uploaded_file:
                 st.write(f'- {topic}')
         except Exception as e:
             st.error(f"話題分類に失敗しました: {e}")
-            
