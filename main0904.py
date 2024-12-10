@@ -69,6 +69,7 @@ if uploaded_file:
     st.text_area("Transcribed Text", transcribed_text, height=300)
 
     # 事前学習用ファイルのアップロード
+    file_id = None  # 初期化
     try:
         with open('前学習_介護用語リスト.jsonl', 'rb') as file:  # JSONLファイルを指定
             file_metadata = openai.File.create(
@@ -80,6 +81,7 @@ if uploaded_file:
     except Exception as e:
         st.error(f"事前学習用ファイルのアップロードに失敗しました: {e}")
 
+    # file_idが存在する場合のみ処理を実行
     if file_id:
         try:
             response = openai.ChatCompletion.create(
