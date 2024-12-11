@@ -67,10 +67,8 @@ if uploaded_file:
 
     st.write("文字起こし結果:")
     st.text_area("Transcribed Text", transcribed_text, height=300)
-
-
-    if file_id:
-        try:
+    
+    try:
             response = openai.ChatCompletion.create(
                 model="gpt-4",  # モデル名を修正
                 messages=[
@@ -85,8 +83,6 @@ if uploaded_file:
                 st.write(f'- {topic}')
         except Exception as e:
             st.error(f"話題分類に失敗しました: {e}")
-    else:
-        st.info("ファイルIDが存在しないため、話題分類はスキップされました。")
 
     try:
         response = openai.ChatCompletion.create(
