@@ -1,100 +1,33 @@
-import os
-import wave
-import json
-import streamlit as st
-from google.cloud import speech
-import openai
+file_id = None  # 初期化
 
-# OpenAI APIキーをStreamlit Secretsから取得
-openai.api_key = st.secrets["openai"]["api_key"]
+# ファイルアップロード処理（必要に応じて有効化）
+# try:
+#     with open('前学習_介護用語リスト.jsonl', 'rb') as file:
+#         file_metadata = openai.File.create(
+#             file=file,
+#             purpose='fine-tune'
+#         )
+#     file_id = file_metadata['id']
+#     st.write(f"事前学習用ファイルをアップロードしました。ファイルID: {file_id}")
+# except Exception as e:
+#     st.error(f"事前学習用ファイルのアップロードに失敗しました: {e}")
 
-# Streamlit SecretsからGoogle Cloud認証情報を取得
-google_credentials_data = st.secrets["GOOGLE_CREDENTIALS"]
-
-# JSONファイルとして書き出し
-with open('google_credentials.json', 'w') as f:
-    json.dump(dict(google_credentials_data), f)
-
-# 環境変数を設定
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'google_credentials.json'
-
-# MP3ファイルをWAVファイルに変換する関数
-def convert_mp3_to_wav(mp3_file_path, wav_file_path):
-    os.system(f'ffmpeg -i {mp3_file_path} {wav_file_path}')
-
-# 音声ファイルをチャンクに分割する関数
-def generate_audio_chunks(file_path, chunk_size=4096):
-    with open(file_path, 'rb') as audio_file:
-        while True:
-            chunk = audio_file.read(chunk_size)
-            if not chunk:
-                break
-            yield speech.StreamingRecognizeRequest(audio_content=chunk)
-
-# Streamlit アプリケーションの設定
-st.title('音声ファイルの処理と話題分類')
-
-uploaded_file = st.file_uploader("MP3ファイルをアップロード", type="mp3")
-
-if uploaded_file:
-    mp3_file_path = 'uploaded_file.mp3'
-    wav_file_path = 'uploaded_file.wav'
-
-    with open(mp3_file_path, 'wb') as f:
-        f.write(uploaded_file.getvalue())
-
-    convert_mp3_to_wav(mp3_file_path, wav_file_path)
-
-    with wave.open(wav_file_path, 'rb') as f:
-        fr = f.getframerate()
-
-    st.write(f"サンプリングレート: {fr}")
-
-    client = speech.SpeechClient()
-    config = speech.RecognitionConfig(
-        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=fr,
-        language_code='ja-JP'
-    )
-    streaming_config = speech.StreamingRecognitionConfig(config=config)
-    requests = generate_audio_chunks(wav_file_path)
-    responses = client.streaming_recognize(config=streaming_config, requests=requests)
-
-    transcribed_text = ""
-    for response in responses:
-        for result in response.results:
-            transcribed_text += result.alternatives[0].transcript + '\n'
-
-    st.write("文字起こし結果:")
-    st.text_area("Transcribed Text", transcribed_text, height=300)
-
-    # # 事前学習用ファイルのアップロード
-    # file_id = None  # 初期化
-    # try:
-    #     with open('前学習_介護用語リスト .jsonl', 'rb') as file:  # JSONLファイルを指定
-    #         file_metadata = openai.File.create(
-    #             file=file,
-    #             purpose='fine-tune'
-    #         )
-    #     file_id = file_metadata['id']
-    #     st.write(f"事前学習用ファイルをアップロードしました。ファイルID: {file_id}")
-    # except Exception as e:
-    #     st.error(f"事前学習用ファイルのアップロードに失敗しました: {e}")
-
-    # file_idが存在する場合のみ処理を実行
-    if file_id:
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": f"以下のテキストを分類してください。"},
-                    {"role": "user", "content": transcribed_text}
-                ]
-            )
-            topic_content = response['choices'][0]['message']['content'].strip()
-            topics = topic_content.split('\n')
-            st.write('分類された話題:')
-            for topic in topics:
-                st.write(f'- {topic}')
-        except Exception as e:
-            st.error(f"話題分類に失敗しました: {e}")
+# file_idが存在する場合のみ処理を実行
+if file_id:
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # モデル名を修正
+            messages=[
+                {"role": "system", "content": f"以下のテキストを分類してください。"},
+                {"role": "user", "content": transcribed_text}
+            ]
+        )
+        topic_content = response['choices'][0]['message']['content'].strip()
+        topics = topic_content.split('\n')
+        st.write('分類された話題:')
+        for topic in topics:
+            st.write(f'- {topic}')
+    except Exception as e:
+        st.error(f"話題分類に失敗しました: {e}")
+else:
+    st.info("ファイルIDが存在しないため、話題分類はスキップされました。")
