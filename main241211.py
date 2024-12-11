@@ -68,6 +68,8 @@ if uploaded_file:
     st.write("文字起こし結果:")
     st.text_area("Transcribed Text", transcribed_text, height=300)
 
+    # 以下、事前学習用ファイルのアップロードおよび関連処理をコメントアウト
+    """
     # 事前学習用ファイルのアップロード
     file_id = None  # 初期化
     try:
@@ -80,8 +82,11 @@ if uploaded_file:
         st.write(f"事前学習用ファイルをアップロードしました。ファイルID: {file_id}")
     except Exception as e:
         st.error(f"事前学習用ファイルのアップロードに失敗しました: {e}")
+    """
 
     # file_idが存在する場合のみ処理を実行
+    # 以下の処理もコメントアウトまたは削除
+    """
     if file_id:
         try:
             response = openai.ChatCompletion.create(
@@ -100,3 +105,22 @@ if uploaded_file:
             st.error(f"話題分類に失敗しました: {e}")
     else:
         st.info("ファイルIDが存在しないため、話題分類はスキップされました。")
+    """
+
+    # **代替案として、事前学習を行わずに直接話題分類を実行する**
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # 正しいモデル名を使用
+            messages=[
+                {"role": "system", "content": "以下のテキストを分類してください。"},
+                {"role": "user", "content": transcribed_text}
+            ]
+        )
+        topic_content = response['choices'][0]['message']['content'].strip()
+        topics = topic_content.split('\n')
+        st.write('分類された話題:')
+        for topic in topics:
+            st.write(f'- {topic}')
+    except Exception as e:
+        st.error(f"話題分類に失敗しました: {e}")
+
