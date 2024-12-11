@@ -6,6 +6,7 @@ import streamlit as st
 from google.cloud import speech
 import openai
 from pydub import AudioSegment
+from google.oauth2 import service_account
 
 # OpenAI APIキーをStreamlit Secretsから取得
 openai.api_key = st.secrets["openai"]["api_key"]
@@ -13,23 +14,38 @@ openai.api_key = st.secrets["openai"]["api_key"]
 # Streamlit SecretsからGoogle Cloud認証情報を取得
 google_credentials_data = st.secrets["GOOGLE_CREDENTIALS"]
 
-# JSONデータをメモリ上で読み込む
-google_credentials_json = json.dumps(google_credentials_data)
+# GOOGLE_CREDENTIALSが文字列か辞書かを判定
+if isinstance(google_credentials_data, str):
+    try:
+        # 文字列としてJSONをロード
+        google_credentials_dict = json.loads(google_credentials_data)
+    except json.JSONDecodeError:
+        st.error("GOOGLE_CREDENTIALSが有効なJSON形式ではありません。")
+        st.stop()
+elif isinstance(google_credentials_data, dict):
+    google_credentials_dict = google_credentials_data
+else:
+    st.error("GOOGLE_CREDENTIALSの形式が不正です。文字列または辞書形式で設定してください。")
+    st.stop()
 
-# 環境変数を設定
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'google_credentials.json'
-
-# メモリ上でGoogle認証情報を保存
-with open('google_credentials.json', 'w') as f:
-    f.write(google_credentials_json)
+# サービスアカウントの認証情報をメモリ内で作成
+try:
+    credentials = service_account.Credentials.from_service_account_info(google_credentials_dict)
+except Exception as e:
+    st.error(f"認証情報の読み込みに失敗しました: {e}")
+    st.stop()
 
 # 音声ファイルをWAVフォーマットに変換する関数（メモリ内で処理）
 def convert_mp3_to_wav(mp3_bytes):
-    audio = AudioSegment.from_file(io.BytesIO(mp3_bytes), format="mp3")
-    wav_io = io.BytesIO()
-    audio.export(wav_io, format="wav")
-    wav_io.seek(0)
-    return wav_io
+    try:
+        audio = AudioSegment.from_file(io.BytesIO(mp3_bytes), format="mp3")
+        wav_io = io.BytesIO()
+        audio.export(wav_io, format="wav")
+        wav_io.seek(0)
+        return wav_io
+    except Exception as e:
+        st.error(f"MP3からWAVへの変換に失敗しました: {e}")
+        st.stop()
 
 # 音声データをチャンクに分割するジェネレーター
 def generate_audio_chunks(wav_bytes, chunk_size=4096):
@@ -56,8 +72,8 @@ if uploaded_file is not None:
 
         st.write(f"サンプリングレート: {fr} Hz")
 
-        # Google Cloud Speechクライアントを初期化
-        client = speech.SpeechClient()
+        # Google Cloud Speechクライアントを初期化（メモリ内の認証情報を使用）
+        client = speech.SpeechClient(credentials=credentials)
 
         config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
