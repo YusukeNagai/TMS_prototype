@@ -68,26 +68,26 @@ if uploaded_file:
     st.write("文字起こし結果:")
     st.text_area("Transcribed Text", transcribed_text, height=300)
 
-    # 事前学習用ファイルのアップロード
-    file_id = None  # 初期化
-    try:
-        with open('前学習_介護用語リスト.jsonl', 'rb') as file:  # JSONLファイルを指定
-            file_metadata = openai.File.create(
-                file=file,
-                purpose='fine-tune'
-            )
-        file_id = file_metadata['id']
-        st.write(f"事前学習用ファイルをアップロードしました。ファイルID: {file_id}")
-    except Exception as e:
-        st.error(f"事前学習用ファイルのアップロードに失敗しました: {e}")
+    # # 事前学習用ファイルのアップロード
+    # file_id = None  # 初期化
+    # try:
+    #     with open('前学習_介護用語リスト .jsonl', 'rb') as file:  # JSONLファイルを指定
+    #         file_metadata = openai.File.create(
+    #             file=file,
+    #             purpose='fine-tune'
+    #         )
+    #     file_id = file_metadata['id']
+    #     st.write(f"事前学習用ファイルをアップロードしました。ファイルID: {file_id}")
+    # except Exception as e:
+    #     st.error(f"事前学習用ファイルのアップロードに失敗しました: {e}")
 
     # file_idが存在する場合のみ処理を実行
     if file_id:
         try:
             response = openai.ChatCompletion.create(
-                model="gpt-4",  # モデル名を修正
+                model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "以下のテキストを分類してください。"},
+                    {"role": "system", "content": f"以下のテキストを分類してください。"},
                     {"role": "user", "content": transcribed_text}
                 ]
             )
@@ -98,5 +98,3 @@ if uploaded_file:
                 st.write(f'- {topic}')
         except Exception as e:
             st.error(f"話題分類に失敗しました: {e}")
-    else:
-        st.info("ファイルIDが存在しないため、話題分類はスキップされました。")
