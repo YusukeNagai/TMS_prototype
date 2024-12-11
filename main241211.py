@@ -81,8 +81,7 @@ if uploaded_file:
             st.write('分類された話題:')
             for topic in topics:
                 st.write(f'- {topic}')
-        except Exception as e:
-            st.error(f"話題分類に失敗しました: {e}")
+
 
     try:
         response = openai.ChatCompletion.create(
