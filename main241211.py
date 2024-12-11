@@ -67,12 +67,14 @@ if uploaded_file:
 
     st.write("文字起こし結果:")
     st.text_area("Transcribed Text", transcribed_text, height=300)
-    
-    try:
+
+
+    if file_id:
+        try:
             response = openai.ChatCompletion.create(
                 model="gpt-4",  # モデル名を修正
                 messages=[
-                    {"role": "system", "content": f"以下のテキストを下に指定する項目ごとに分類してください。介護領域の特有の単語を考慮して分類してください。項目：名前, 年齢, 性別, 住所, 既往歴, 現在の状態, 医師の診断, 投薬, 住環境, 同居家族, 経済状況, 自立度, 食事, トイレ, 認知機能の状態, 記憶, 認知テスト, 趣味, 外出頻度, 友人関係, 妻の支援状況, 息子の支援状況, 一人での外出の傾向, 注意点, 要望, 現在のデイサービス, 現在の訪問介護"},
+                    {"role": "system", "content": f"以下のテキストを下に指定する項目ごとに分類してください。介護領域の特有の単語リストを使用して分類してください。特有の単語リストのファイルIDは{file_id}です。項目：名前, 年齢, 性別, 住所, 既往歴, 現在の状態, 医師の診断, 投薬, 住環境, 同居家族, 経済状況, 自立度, 食事, トイレ, 認知機能の状態, 記憶, 認知テスト, 趣味, 外出頻度, 友人関係, 妻の支援状況, 息子の支援状況, 一人での外出の傾向, 注意点, 要望, 現在のデイサービス, 現在の訪問介護"},
                     {"role": "user", "content": transcribed_text}
                 ]
             )
@@ -81,7 +83,10 @@ if uploaded_file:
             st.write('分類された話題:')
             for topic in topics:
                 st.write(f'- {topic}')
-
+        except Exception as e:
+            st.error(f"話題分類に失敗しました: {e}")
+    else:
+        st.info("ファイルIDが存在しないため、話題分類はスキップされました。")
 
     try:
         response = openai.ChatCompletion.create(
@@ -98,4 +103,3 @@ if uploaded_file:
             st.write(f'- {topic}')
     except Exception as e:
         st.error(f"話題分類に失敗しました: {e}")
-
