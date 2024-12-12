@@ -43,4 +43,4 @@ jobs:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         GOOGLE_APPLICATION_CREDENTIALS: google_credentials.json
       run: |
-        streamlit run main0904.py --server.port 8501 --server.headless true
+        streamlit run main241211.py --server.port 8501 --server.headless true
