@@ -8,43 +8,50 @@ import tempfile
 import subprocess
 import pandas as pd
 
-# CSSでfile_uploaderのスタイルを調整
+# 全体のスタイル設定
 st.markdown("""
 <style>
-/* file_uploaderの全体を大きくカスタマイズ */
+body {
+    font-size: 1.5em;
+}
+h1, h2, h3 {
+    font-size: 2em !important;
+}
+table {
+    font-size: 1.3em;
+}
+textarea {
+    font-size: 1.3em;
+}
 div[data-testid="stFileUploader"] {
     text-align: center;
-    border: 4px dashed #ccc; /* 点線の枠 */
-    border-radius: 15px;    /* 角を丸く */
-    padding: 50px;          /* 内側の余白を広げる */
-    margin: 20px auto;      /* 周囲の余白を中央揃え */
-    font-size: 1.5em;       /* 文字サイズを大きく */
-    color: #333;            /* テキストの色 */
-    background-color: #f9f9f9; /* 背景色 */
-    width: 80%;             /* 全体幅 */
-    max-width: 600px;       /* 最大幅を設定 */
-    cursor: pointer;        /* ホバーで手のアイコンに */
+    border: 4px dashed #ccc;
+    border-radius: 15px;
+    padding: 50px;
+    margin: 20px auto;
+    font-size: 1.5em;
+    color: #333;
+    background-color: #f9f9f9;
+    width: 80%;
+    max-width: 600px;
+    cursor: pointer;
 }
-
-/* file_uploaderがhoverされた時の効果 */
 div[data-testid="stFileUploader"]:hover {
-    background-color: #eee; /* 背景色を少し変更 */
-    border-color: #aaa;     /* 枠線の色を濃く */
+    background-color: #eee;
+    border-color: #aaa;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# OpenAI APIキーの設定
+# OpenAIとGoogle CloudのAPIキー設定
 openai.api_key = st.secrets["openai"]["api_key"]
-
-# Google Cloud Credentials
 google_credentials_data = st.secrets["GOOGLE_CREDENTIALS"]
 with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as cred_file:
     json.dump(dict(google_credentials_data), cred_file)
     google_credentials_path = cred_file.name
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 
-# MP3ファイルをWAVファイルに変換する関数
+# MP3からWAVへの変換
 def convert_mp3_to_wav(mp3_file_path, wav_file_path):
     try:
         subprocess.run(['ffmpeg', '-y', '-i', mp3_file_path, wav_file_path], check=True)
@@ -53,7 +60,7 @@ def convert_mp3_to_wav(mp3_file_path, wav_file_path):
         return False
     return True
 
-# 音声ファイルをチャンクに分割する関数
+# 音声ファイルをチャンクに分割
 def generate_audio_chunks(file_path, chunk_size=4096):
     with open(file_path, 'rb') as audio_file:
         while True:
@@ -62,13 +69,11 @@ def generate_audio_chunks(file_path, chunk_size=4096):
                 break
             yield speech.StreamingRecognizeRequest(audio_content=chunk)
 
-# StreamlitアプリケーションのUI設定
+# アプリケーションUI
 st.markdown("<h1 style='text-align:center;'>音声ファイル処理と話題分類</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>MP3ファイルを下のエリアにドラッグ＆ドロップまたはクリックして選択してください。</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;'>MP3ファイルを以下にドラッグ＆ドロップまたはクリックして選択してください。</p>", unsafe_allow_html=True)
 
-# ファイルアップロード
-tempfile.tempdir = '/tmp'  # 一時ファイルの保存先
-uploaded_file = st.file_uploader("ここにファイルをドラッグ＆ドロップ！", type="mp3")
+uploaded_file = st.file_uploader("", type="mp3")
 
 if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_mp3:
@@ -78,12 +83,11 @@ if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
         wav_file_path = tmp_wav.name
 
-    processing_placeholder = st.empty()
-    processing_placeholder.markdown("<h2 style='text-align:center;'>ファイルを処理中です…</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;'>しばらくお待ちください</p>", unsafe_allow_html=True)
+    # 処理中メッセージ
+    st.markdown("<h2 style='text-align:center;'>ファイルを処理中です…</h2>", unsafe_allow_html=True)
     progress_bar = st.progress(0)
 
-    # (1) MP3→WAV変換
+    # MP3→WAV変換
     progress_bar.progress(10)
     if convert_mp3_to_wav(mp3_file_path, wav_file_path):
         progress_bar.progress(40)
@@ -91,7 +95,7 @@ if uploaded_file is not None:
             with wave.open(wav_file_path, 'rb') as f:
                 fr = f.getframerate()
 
-            # (2) 文字起こし
+            # 音声の文字起こし
             progress_bar.progress(50)
             client = speech.SpeechClient()
             config = speech.RecognitionConfig(
@@ -110,56 +114,41 @@ if uploaded_file is not None:
                 for result in response.results:
                     transcribed_text += result.alternatives[0].transcript + '\n'
 
-            # (3) 話題分類
+            # 話題分類
             progress_bar.progress(85)
-            try:
-                response = openai.ChatCompletion.create(
-                    model="gpt-4",
-                    messages=[
-                        {
-                            "role": "system", 
-                            "content": "以下のテキストをケアマネジャーさんにとって必要な内容が中心となるように要約して下さい。その後、下に指定する項目ごとに分類してください。項目と内容の形式は 名前: 田中太郎 のようにしろ。ただし音声記録から埋めることができない項目は\"記載なし\"と記せ。項目：名前, 年齢, 性別, 住所, 既往歴, 現在の状態, 医師の診断, 投薬, 住環境, 同居家族, 経済状況, 自立度, 食事, トイレ, 認知機能の状態, 記憶, 認知テスト, 趣味, 外出頻度, 友人関係, 妻の支援状況, 息子の支援状況, 一人での外出の傾向, 注意点, 要望, 現在のデイサービス, 現在の訪問介護"
-                        },
-                        {"role": "user", "content": transcribed_text}
-                    ]
-                )
-                topic_content = response['choices'][0]['message']['content'].strip()
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[
+                    {
+                        "role": "system", 
+                        "content": "以下のテキストを要約し、指定された項目に分類してください。空白の項目は「記載なし」としてください。"
+                    },
+                    {"role": "user", "content": transcribed_text}
+                ]
+            )
+            topic_content = response['choices'][0]['message']['content'].strip()
 
-                progress_bar.progress(100)
-                processing_placeholder.empty()
+            progress_bar.progress(100)
 
-                st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
+            # 結果の表示
+            st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
 
-                # 文字起こし結果表示
-                st.markdown("### 文字起こし結果")
-                st.text_area("Transcribed Text", transcribed_text, height=200)
+            st.markdown("### 要約")
+            summary = topic_content.split("\n", 1)[0]
+            st.markdown(f"<div style='padding:10px; font-size:1.2em;'>{summary}</div>", unsafe_allow_html=True)
 
-                # 分類された話題をテーブル表示
-                lines = [line for line in topic_content.split('\n') if line.strip()]
-                categories = []
-                values = []
-                for line in lines:
-                    if ':' in line:
-                        c, v = line.split(':', 1)
-                        categories.append(c.strip())
-                        values.append(v.strip())
-                    else:
-                        categories.append(line.strip())
-                        values.append("記載なし")
+            st.markdown("### 分類された話題")
+            lines = topic_content.split("\n")[1:]
+            categories, values = zip(*(line.split(":", 1) if ":" in line else (line, "記載なし") for line in lines))
+            df = pd.DataFrame({"項目": categories, "内容": values})
 
-                st.markdown("### 分類された話題")
-                df = pd.DataFrame({"項目": categories, "内容": values})
-                st.table(df)
+            def highlight_missing(s):
+                return ['background-color: #fdd' if v == "記載なし" else '' for v in s]
 
-            except Exception as e:
-                processing_placeholder.empty()
-                st.error(f"話題分類に失敗しました: {e}")
-        except wave.Error as e:
-            processing_placeholder.empty()
-            st.error(f"WAVファイルの読み込みに失敗しました: {e}")
-    else:
-        processing_placeholder.empty()
-        st.error("MP3からWAVへの変換が失敗しました。")
+            st.table(df.style.apply(highlight_missing, subset=['内容']))
+
+        except Exception as e:
+            st.error(f"処理に失敗しました: {e}")
 
     # 一時ファイル削除
     try:
