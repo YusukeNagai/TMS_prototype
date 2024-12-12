@@ -129,20 +129,24 @@ if uploaded_file is not None:
                 # 結果を表形式で表示
                 # 項目ごとに':'区切りで扱える場合はここで処理する
                 # そうでなければ単純に行で表示
-                # ここでは「項目：内容」形式になっていると想定し、DataFrame化を試みる
+                
+                # ここでは「項目:内容」形式になっていると想定し、DataFrame化を試みる
                 lines = [line for line in topic_content.split('\n') if line.strip() != '']
                 categories = []
                 values = []
                 for line in lines:
-                    # 「項目：内容」の形式を想定
-                    if '：' in line:
-                        cat, val = line.split('：', 1)
-                        categories.append(cat.strip())
-                        values.append(val.strip())
-                    else:
-                        # 万一想定外の場合はそのまま行として表示
-                        categories.append(line)
-                        values.append("記載なし")
+                # 「項目: 内容」の形式を想定（半角コロンを使用）
+                if ':' in line:
+                    cat, val = line.split(':', 1)
+                    categories.append(cat.strip())
+                    values.append(val.strip())
+                else:
+                    # コロンが含まれない場合は記載なし扱い
+                    categories.append(line.strip())
+                    values.append("記載なし")
+
+                df = pd.DataFrame({"項目": categories, "内容": values})
+
 
                 df = pd.DataFrame({"項目": categories, "内容": values})
                 # "記載なし"を目立たせるため、スタイルを付与（背景色や文字色など）
