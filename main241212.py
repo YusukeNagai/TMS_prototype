@@ -8,20 +8,33 @@ import tempfile
 import subprocess
 import pandas as pd
 
-# 全体的な文字サイズを大きくするCSS
+# 全体的な文字サイズを更に大きくするCSS
 st.markdown("""
 <style>
 body {
-    font-size: 1.2em;
+    font-size: 1.5em;  /* 全体をさらに大きく */
 }
 h1, h2, h3 {
-    font-size: 1.4em !important;
+    font-size: 2em !important;  /* 見出しもさらに大きく */
 }
 table {
-    font-size: 1.1em;
+    font-size: 1.3em;
 }
 textarea {
-    font-size: 1.1em;
+    font-size: 1.3em;
+}
+/* アップロードエリアやテキストを目立たせる */
+#upload-area {
+    text-align:center;
+    font-size: 2.5em;
+    font-weight: bold;
+    margin: 20px auto;
+    border: 4px dashed #ccc;
+    border-radius: 15px;
+    padding: 50px;
+    width: 80%;
+    max-width: 600px;
+    color: #333;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -58,17 +71,14 @@ def generate_audio_chunks(file_path, chunk_size=4096):
                 break
             yield speech.StreamingRecognizeRequest(audio_content=chunk)
 
+# ================================
+# UI 改善
+# ================================
+st.markdown("<h1 style='text-align:center; font-size: 3em;'>音声ファイルの処理と話題分類</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center; font-size:1.5em;'>MP3ファイルを下のエリアにドラッグ＆ドロップまたはクリックして選択してください。</p>", unsafe_allow_html=True)
 
-# ================================
-# UI 改善：ステップバイステップ & シンプルな画面
-# ・アップロードのみで自動処理開始（次へボタン不要）
-# ・処理中は進捗を表示
-# ・結果はテーブル表示
-# ・要約はテーブル外で大項目として表示
-# ================================
-st.markdown("<h1 style='text-align:center; font-size: 2.5em;'>音声ファイルの処理と話題分類</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center; font-size:1.3em;'>MP3ファイルをドラッグ＆ドロップまたはボタンをクリックしてアップロードしてください。</p>", unsafe_allow_html=True)
-st.markdown("<div style='text-align:center; font-size:3em;'>➕</div>", unsafe_allow_html=True)
+# ドラッグ＆ドロップエリアを大きく目立たせる
+st.markdown("<div id='upload-area'>ここにファイルをドラッグ＆ドロップ！</div>", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("", type="mp3")
 
@@ -166,7 +176,7 @@ if uploaded_file is not None:
                 summary_text = ""
                 final_lines = []
                 for ml in merged_lines:
-                    if ml.lower().startswith("要約:") or ml.lower().startswith("要約:"):
+                    if ml.lower().startswith("要約:"):
                         # 要約行の場合
                         _, s_val = ml.split(':', 1)
                         summary_text = s_val.strip()
