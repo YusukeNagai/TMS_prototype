@@ -8,6 +8,24 @@ import tempfile
 import subprocess
 import pandas as pd
 
+# 全体的な文字サイズを大きくするCSS
+st.markdown("""
+<style>
+body {
+    font-size: 1.2em;
+}
+h1, h2, h3 {
+    font-size: 1.4em !important;
+}
+table {
+    font-size: 1.1em;
+}
+textarea {
+    font-size: 1.1em;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # OpenAI APIキーをStreamlit Secretsから取得
 openai.api_key = st.secrets["openai"]["api_key"]
 
@@ -46,9 +64,10 @@ def generate_audio_chunks(file_path, chunk_size=4096):
 # ・アップロードのみで自動処理開始（次へボタン不要）
 # ・処理中は進捗を表示
 # ・結果はテーブル表示
+# ・要約はテーブル外で大項目として表示
 # ================================
 st.markdown("<h1 style='text-align:center; font-size: 2.5em;'>音声ファイルの処理と話題分類</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center; font-size:1.2em;'>MP3ファイルをドラッグ＆ドロップまたはボタンをクリックしてアップロードしてください。</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center; font-size:1.3em;'>MP3ファイルをドラッグ＆ドロップまたはボタンをクリックしてアップロードしてください。</p>", unsafe_allow_html=True)
 st.markdown("<div style='text-align:center; font-size:3em;'>➕</div>", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("", type="mp3")
@@ -116,15 +135,14 @@ if uploaded_file is not None:
                 # 結果表示
                 st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
 
+                # 文字起こし結果表示
                 st.markdown("### 文字起こし結果")
                 st.text_area("Transcribed Text", transcribed_text, height=200)
-
-                st.markdown("### 分類された話題")
 
                 # 全角コロンを半角コロンに統一してから分割
                 lines = [line for line in topic_content.split('\n') if line.strip()]
 
-                # 要約など、コロンがあるが内容が同じ行にない場合、次行を内容として結合する処理
+                # 要約行と項目行分けて処理
                 merged_lines = []
                 i = 0
                 while i < len(lines):
@@ -144,10 +162,26 @@ if uploaded_file is not None:
                         merged_lines.append(current_line)
                     i += 1
 
+                # 要約を抜き出す
+                summary_text = ""
+                final_lines = []
+                for ml in merged_lines:
+                    if ml.lower().startswith("要約:") or ml.lower().startswith("要約:"):
+                        # 要約行の場合
+                        _, s_val = ml.split(':', 1)
+                        summary_text = s_val.strip()
+                    else:
+                        final_lines.append(ml)
+
+                # 要約表示
+                if summary_text:
+                    st.markdown("### 要約")
+                    st.markdown(f"<div style='border:1px solid #ccc; padding:10px; font-size:1.2em;'>{summary_text}</div>", unsafe_allow_html=True)
+
+                # テーブル化
                 categories = []
                 values = []
-
-                for line in merged_lines:
+                for line in final_lines:
                     if ':' in line:
                         c, v = line.split(':', 1)
                         categories.append(c.strip())
@@ -156,6 +190,8 @@ if uploaded_file is not None:
                         categories.append(line.strip())
                         values.append("記載なし")
 
+                # 分類された話題テーブル表示
+                st.markdown("### 分類された話題")
                 df = pd.DataFrame({"項目": categories, "内容": values})
                 
                 # "記載なし"を目立たせるスタイル
