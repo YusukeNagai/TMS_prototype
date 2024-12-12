@@ -136,14 +136,14 @@ if uploaded_file is not None:
                 values = []
                 for line in lines:
                 # 「項目: 内容」の形式を想定（半角コロンを使用）
-                if ':' in line:
-                    cat, val = line.split(':', 1)
-                    categories.append(cat.strip())
-                    values.append(val.strip())
-                else:
-                    # コロンが含まれない場合は記載なし扱い
-                    categories.append(line.strip())
-                    values.append("記載なし")
+                    if ':' in line:
+                        cat, val = line.split(':', 1)
+                        categories.append(cat.strip())
+                        values.append(val.strip())
+                    else:
+                        # コロンが含まれない場合は記載なし扱い
+                        categories.append(line.strip())
+                        values.append("記載なし")
 
                 df = pd.DataFrame({"項目": categories, "内容": values})
 
