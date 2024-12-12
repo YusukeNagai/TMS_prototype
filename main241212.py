@@ -122,17 +122,36 @@ if uploaded_file is not None:
                 st.markdown("### 分類された話題")
 
                 # 全角コロンを半角コロンに統一してから分割
-                lines = [line for line in topic_content.split('\n') if line.strip() != '']
+                lines = [line for line in topic_content.split('\n') if line.strip()]
+
+                # 要約など、コロンがあるが内容が同じ行にない場合、次行を内容として結合する処理
+                merged_lines = []
+                i = 0
+                while i < len(lines):
+                    current_line = lines[i].replace('：', ':')
+                    if ':' in current_line:
+                        cat, val = current_line.split(':', 1)
+                        cat = cat.strip()
+                        val = val.strip()
+                        if val == '' and i + 1 < len(lines):
+                            # 次の行を内容として結合
+                            next_line = lines[i+1].strip()
+                            val = next_line
+                            i += 1
+                        merged_lines.append(f"{cat}: {val}")
+                    else:
+                        # コロンがない行はそのまま
+                        merged_lines.append(current_line)
+                    i += 1
+
                 categories = []
                 values = []
 
-                for line in lines:
-                    # 全角コロンを半角コロンに変換
-                    line = line.replace('：', ':')
+                for line in merged_lines:
                     if ':' in line:
-                        cat, val = line.split(':', 1)
-                        categories.append(cat.strip())
-                        values.append(val.strip())
+                        c, v = line.split(':', 1)
+                        categories.append(c.strip())
+                        values.append(v.strip())
                     else:
                         categories.append(line.strip())
                         values.append("記載なし")
