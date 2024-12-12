@@ -10,6 +10,7 @@ import subprocess
 # OpenAI APIキーをStreamlit Secretsから取得
 openai.api_key = st.secrets["openai"]["api_key"]
 
+
 # Streamlit SecretsからGoogle Cloud認証情報を取得
 google_credentials_data = st.secrets["GOOGLE_CREDENTIALS"]
 
