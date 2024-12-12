@@ -3,38 +3,32 @@ name: Streamlit App Deployment
 on:
   push:
     branches:
-      - main  # mainブランチにコードをプッシュしたときに自動実行される
+      - main
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest  # GitHub ActionsはUbuntuの最新環境で動作する
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2  # リポジトリのコードをチェックアウト
-      
+      uses: actions/checkout@v2
+
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.9'  # Python 3.9を使用
+        python-version: '3.9'
 
-    - name: Install ffmpeg
-      run: sudo apt-get install -y ffmpeg  # ffmpegのインストール
+    - name: Install dependencies and tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg python3-distutils
 
-    # シークレットを使用してJSONファイルを作成
-    - name: create-json
-      id: create-json
-      uses: jsdaniell/create-json@v1.2.2
-      with:
-        name: "google_credentials.json"  # 作成するファイル名
-        json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}  # シークレットからJSONの内容を取得
-
-    - name: Install distutils
-      run: sudo apt-get install python3-distutils
+    - name: Create Google credentials file
+      run: |
+        echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > google_credentials.json
 
     - name: Install dependencies
-      run: |
-        pip install -r requirements.txt  # プロジェクトの依存パッケージをインストール
+      run: pip install -r requirements.txt
 
     - name: Cache pip dependencies
       uses: actions/cache@v2
@@ -46,7 +40,7 @@ jobs:
 
     - name: Run Streamlit app
       env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # GitHub SecretsからAPIキーを取得して環境変数として設定
-        GOOGLE_APPLICATION_CREDENTIALS: google_credentials.json  # 作成したGoogle Cloud認証情報ファイルのパスを設定
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        GOOGLE_APPLICATION_CREDENTIALS: google_credentials.json
       run: |
-        streamlit run main0904.py  # Streamlitアプリを起動
+        streamlit run main0904.py --server.port 8501 --server.headless true
