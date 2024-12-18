@@ -115,24 +115,61 @@ if uploaded_file is not None:
                     transcribed_text += result.alternatives[0].transcript + '\n'
 
             # 話題分類
+            progress_bar.progress(85)
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "以下のテキストをケアマネジャーさんにとって必要な内容が中心となるように要約して下さい。その後、下に指定する項目ごとに分類してください。項目と内容の形式は 要約: 田中さんは～ のようにしろ。ただし音声記録から埋めることができない項目は\"記載なし\"と記せ。項目：名前, 年齢, 性別, 住所, 既往歴, 現在の状態, 医師の診断, 投薬, 住環境, 同居家族, 経済状況, 自立度, 食事, トイレ, 認知機能の状態, 記憶, 認知テスト, 趣味, 外出頻度, 友人関係, 妻の支援状況, 息子の支援状況, 一人での外出の傾向, 注意点, 要望, 現在のデイサービス, 現在の訪問介護"
+                    },
+                    {"role": "user", "content": transcribed_text}
+                ]
+            )
+            topic_content = response['choices'][0]['message']['content'].strip()
 
-            # 改行を含むプロンプトの定義
-            prompt = """最下部に記す音声記録を参考にし、以下の手順でテキストの要約と内容整理を行ってください。
-1. **要約作成**
-   - 文章全体の中から重要な内容を抽出し、簡潔に要約します。
+            progress_bar.progress(100)
 
-2. **話題の項目と内容の整理**
-    - 要約した内容を更に分解し、話題に合わせた項目とその具体的な内容を整理して提示してください。
-    - それぞれの項目と内容は「要約: 田中さんは～」の形式で記述してください。
+            # 要約部分を抽出
+            lines = topic_content.split("\n")
+            summary = lines[0] if lines[0].lower().startswith("要約") else "記載なし"
+            topic_lines = lines[1:] if summary != "記載なし" else lines
 
-下記の項目は音声記録にすべて入っているわけではない。下記の項目の中から話題に上がったもののみ、分類せよ。
+            # 分類された話題をデータフレーム化
+            categories = []
+            values = []
+            for line in topic_lines:
+                if ":" in line:
+                    c, v = line.split(":", 1)
+                    categories.append(c.strip())
+                    values.append(v.strip())
+                else:
+                    categories.append(line.strip())
+                    values.append("記載なし")
 
+            df = pd.DataFrame({"項目": categories, "内容": values})
 
-# 出力形式
+            # 結果の表示
+            st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
 
-- 各要約と項目の内容は短く、簡潔な文でまとめてください。
-- 形式例: `要約: [該当内容]`
+            # 要約の表示
+            st.markdown("### 要約")
+            st.markdown(f"<div style='padding:10px; font-size:1.2em;'>{summary}</div>", unsafe_allow_html=True)
 
-# 例
+            # 分類された話題の表示
+            st.markdown("### 分類された話題")
 
-**入力**
+            def highlight_missing(s):
+                return ['background-color: #fdd' if v == "記載なし" else '' for v in s]
+
+            st.table(df.style.apply(highlight_missing, subset=['内容']))
+
+        except Exception as e:
+            st.error(f"処理に失敗しました: {e}")
+
+    # 一時ファイル削除
+    try:
+        os.remove(mp3_file_path)
+        os.remove(wav_file_path)
+    except Exception as e:
+        st.warning(f"一時ファイルの削除に失敗しました: {e}")
