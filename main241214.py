@@ -117,11 +117,11 @@ if uploaded_file is not None:
             # 話題分類
             progress_bar.progress(85)
             response = openai.ChatCompletion.create(
-                model="gpt-4",
+                model="gpt-4o",
                 messages=[
                     {
                         "role": "system",
-                        "content": """音声記録を参考にし、以下の手順でテキストの要約と内容整理を行ってください。
+                        "content": """最下部に記す音声記録を参考にし、以下の手順でテキストの要約と内容整理を行ってください。
                                     1. **要約作成**
                                        - 文章全体の中から重要な内容を抽出し、簡潔に要約します。
 
