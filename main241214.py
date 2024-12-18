@@ -115,95 +115,24 @@ if uploaded_file is not None:
                     transcribed_text += result.alternatives[0].transcript + '\n'
 
             # 話題分類
-            progress_bar.progress(85)
-            response = openai.ChatCompletion.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content":"""あなたは介護領域に置ける幅ひろい専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答をすることができます。" },
-                    {"role": "user", "content":"最下部に記す音声記録を参考にし、以下の手順でテキストの要約と内容整理を行ってください。
-                                    1. **要約作成**
-                                       - 文章全体の中から重要な内容を抽出し、簡潔に要約します。
 
-                                    2. **話題の項目と内容の整理**
-                                        - 要約した内容を更に分解し、話題に合わせた項目とその具体的な内容を整理して提示してください。
-                                        - それぞれの項目と内容は「要約: 田中さんは～」の形式で記述してください。
+            # 改行を含むプロンプトの定義
+            prompt = """最下部に記す音声記録を参考にし、以下の手順でテキストの要約と内容整理を行ってください。
+1. **要約作成**
+   - 文章全体の中から重要な内容を抽出し、簡潔に要約します。
 
-                                    下記の項目は音声記録にすべて入っているわけではない。下記の項目の中から話題に上がったもののみ、分類せよ。
+2. **話題の項目と内容の整理**
+    - 要約した内容を更に分解し、話題に合わせた項目とその具体的な内容を整理して提示してください。
+    - それぞれの項目と内容は「要約: 田中さんは～」の形式で記述してください。
+
+下記の項目は音声記録にすべて入っているわけではない。下記の項目の中から話題に上がったもののみ、分類せよ。
 
 
-                                    # 出力形式
-                                    
-                                    - 各要約と項目の内容は短く、簡潔な文でまとめてください。
-                                    - 形式例: `要約: [該当内容]`
-                                    
-                                    # 例
-                                    
-                                    **入力**
-                                    ```
-                                    こんにちは、田中さん～
-                                    ```
-                                    
-                                    **出力**
-                                    ```
-                                    要約: 田中さんは～（実際に要約する際は、内容や項目の詳細情報を記載します）
-                                    1. コミュニケーション
-                                    視力：～
-                                    ```
-                                    
-                                    # Notes
-                                    
-                                    - 記入項目ごとの注意点に従い、信頼性のある情報を選んで要約に含めてください。
-                                    - 各要約が論理的に正確であることを確認してください。
-                                    - 情報の非対称性や誤解を避けるため、明確で簡潔な表現を心がけてください。
-                                    """
-                    },
-                    {"role": "user", "content": transcribed_text}
-                ]
-            )
-            topic_content = response['choices'][0]['message']['content'].strip()
+# 出力形式
 
-            progress_bar.progress(100)
+- 各要約と項目の内容は短く、簡潔な文でまとめてください。
+- 形式例: `要約: [該当内容]`
 
-            # 要約部分を抽出
-            lines = topic_content.split("\n")
-            summary = lines[0] if lines[0].lower().startswith("要約") else "記載なし"
-            topic_lines = lines[1:] if summary != "記載なし" else lines
+# 例
 
-            # 分類された話題をデータフレーム化
-            categories = []
-            values = []
-            for line in topic_lines:
-                if ":" in line:
-                    c, v = line.split(":", 1)
-                    categories.append(c.strip())
-                    values.append(v.strip())
-                else:
-                    categories.append(line.strip())
-                    values.append("記載なし")
-
-            df = pd.DataFrame({"項目": categories, "内容": values})
-
-            # 結果の表示
-            st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
-
-            # 要約の表示
-            st.markdown("### 要約")
-            st.markdown(f"<div style='padding:10px; font-size:1.2em;'>{summary}</div>", unsafe_allow_html=True)
-
-            # 分類された話題の表示
-            st.markdown("### 分類された話題")
-
-            def highlight_missing(s):
-                return ['background-color: #fdd' if v == "記載なし" else '' for v in s]
-
-            st.table(df.style.apply(highlight_missing, subset=['内容']))
-
-        except Exception as e:
-            st.error(f"処理に失敗しました: {e}")
-
-    # 一時ファイル削除
-    try:
-        os.remove(mp3_file_path)
-        os.remove(wav_file_path)
-    except Exception as e:
-        st.warning(f"一時ファイルの削除に失敗しました: {e}")
+**入力**
