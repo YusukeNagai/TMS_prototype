@@ -2,13 +2,13 @@ import os
 import wave
 import json
 import streamlit as st
-from google.cloud import speech, storage
+from google.cloud import speech
 import openai
 import tempfile
 import subprocess
 import pandas as pd
-import time
-import re
+import time  # 追加
+import re  # 追加
 
 # CSSのスタイル設定
 st.markdown("""
@@ -47,54 +47,29 @@ div[data-testid="stFileUploader"]:hover {
 
 # OpenAIとGoogle CloudのAPIキー設定
 openai.api_key = st.secrets["openai"]["api_key"]
-
-# Google Cloudの認証情報とGCSバケット名をシークレットから取得
 google_credentials_data = st.secrets["GOOGLE_CREDENTIALS"]
-gcs_bucket_name = st.secrets["GCS_BUCKET_NAME"]
-
-# 認証情報を一時ファイルに書き出し
 with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as cred_file:
     json.dump(dict(google_credentials_data), cred_file)
     google_credentials_path = cred_file.name
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 
-# GCSクライアントの初期化
-storage_client = storage.Client()
-
-# MP3からWAVへの変換関数（最適化およびサンプリングレート変更）
-def convert_mp3_to_wav(mp3_file_path, wav_file_path, sample_rate=8000):
+# MP3からWAVへの変換関数
+def convert_mp3_to_wav(mp3_file_path, wav_file_path):
     try:
-        # サンプリングレートを8000Hz、モノラルに変換
-        subprocess.run([
-            'ffmpeg', '-y', '-i', mp3_file_path,
-            '-ar', str(sample_rate), '-ac', '1',
-            wav_file_path
-        ], check=True)
+        subprocess.run(['ffmpeg', '-y', '-i', mp3_file_path, wav_file_path], check=True)
     except subprocess.CalledProcessError as e:
         st.error(f"ffmpegの変換に失敗しました: {e}")
         return False
     return True
 
-# WAVファイルをGCSにアップロードする関数
-def upload_to_gcs(wav_file_path, destination_blob_name):
-    try:
-        bucket = storage_client.bucket(gcs_bucket_name)
-        blob = bucket.blob(destination_blob_name)
-        blob.upload_from_filename(wav_file_path)
-        gcs_uri = f"gs://{gcs_bucket_name}/{destination_blob_name}"
-        return gcs_uri
-    except Exception as e:
-        st.error(f"GCSへのアップロードに失敗しました: {e}")
-        return None
-
-# GCSからファイルを削除する関数（クリーンアップ用）
-def delete_from_gcs(blob_name):
-    try:
-        bucket = storage_client.bucket(gcs_bucket_name)
-        blob = bucket.blob(blob_name)
-        blob.delete()
-    except Exception as e:
-        st.warning(f"GCSからのファイル削除に失敗しました: {e}")
+# 音声ファイルをチャンクに分割する関数
+def generate_audio_chunks(file_path, chunk_size=4096):
+    with open(file_path, 'rb') as audio_file:
+        while True:
+            chunk = audio_file.read(chunk_size)
+            if not chunk:
+                break
+            yield speech.StreamingRecognizeRequest(audio_content=chunk)
 
 # アプリケーションUI
 st.markdown("<h1 style='text-align:center;'>音声ファイル処理と話題分類</h1>", unsafe_allow_html=True)
@@ -118,62 +93,40 @@ if uploaded_file is not None:
     timing = {}
 
     # MP3→WAV変換
-    start_time = time.perf_counter()
+    start_time = time.perf_counter()  # 開始時間
     progress_bar.progress(10)
-    # サンプリングレートを8000Hzに設定
-    if convert_mp3_to_wav(mp3_file_path, wav_file_path, sample_rate=8000):
-        end_time = time.perf_counter()
+    if convert_mp3_to_wav(mp3_file_path, wav_file_path):
+        end_time = time.perf_counter()  # 終了時間
         timing['MP3 to WAV変換'] = end_time - start_time
-        progress_bar.progress(30)
+        progress_bar.progress(40)
         try:
             with wave.open(wav_file_path, 'rb') as f:
                 fr = f.getframerate()
-                channels = f.getnchannels()
-                sampwidth = f.getsampwidth()
-                n_frames = f.getnframes()
-                duration = n_frames / fr
 
-            # 音声ファイルの長さに応じて認識方法を選択
-            # 今回は常に非同期認識を使用
-
-            # WAVファイルをGCSにアップロード
-            blob_name = f"uploaded_audio_{int(time.time())}.wav"
-            gcs_uri = upload_to_gcs(wav_file_path, blob_name)
-            if not gcs_uri:
-                raise Exception("GCSへのアップロードに失敗しました。")
-
-            # 音声の文字起こし（非同期認識に変更、GCS URIを使用）
+            # 音声の文字起こし
             start_time = time.perf_counter()
-            progress_bar.progress(40)
+            progress_bar.progress(50)
             client = speech.SpeechClient()
-
             config = speech.RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=8000,  # サンプリングレートを8000Hzに設定
-                language_code='ja-JP',
-                enable_automatic_punctuation=True
+                sample_rate_hertz=fr,
+                language_code='ja-JP'
             )
+            streaming_config = speech.StreamingRecognitionConfig(config=config)
+            requests = generate_audio_chunks(wav_file_path)
 
-            audio = speech.RecognitionAudio(uri=gcs_uri)
-
-            # 非同期認識の実行
-            operation = client.long_running_recognize(config=config, audio=audio)
-
-            # 処理中のステータス更新
-            with st.spinner("音声の文字起こしを実行中です…"):
-                response = operation.result(timeout=600)  # タイムアウトを600秒に設定
+            responses = client.streaming_recognize(config=streaming_config, requests=requests)
 
             transcribed_text = ""
-            for result in response.results:
-                transcribed_text += result.alternatives[0].transcript + '\n'
-
+            for response in responses:
+                for result in response.results:
+                    transcribed_text += result.alternatives[0].transcript + '\n'
             end_time = time.perf_counter()
             timing['音声の文字起こし'] = end_time - start_time
-            progress_bar.progress(70)
 
             # 話題分類
             start_time = time.perf_counter()
-            progress_bar.progress(80)
+            progress_bar.progress(85)
             response = openai.ChatCompletion.create(
                 model="gpt-4",
                 messages=[
@@ -355,9 +308,6 @@ _____________________________________________________________
             # リマインドメッセージの表示
             st.markdown("### 今後の質問事項")
             st.markdown("次回は食事や水分補給について聞いてみると、田中さんの健康管理に関する理解が深まりそうです。")
-
-            # GCSから音声ファイルを削除（クリーンアップ）
-            delete_from_gcs(blob_name)
 
         except Exception as e:
             st.error(f"処理に失敗しました: {e}")
