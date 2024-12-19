@@ -236,7 +236,7 @@ if uploaded_file is not None:
                     - 各要約が論理的に正確であることを確認してください。
                     - 情報の非対称性や誤解を避けるため、明確で簡潔な表現を心がけてください。
                     """
-                  }
+                  },
                   {"role": "user", "content": transcribed_text}
                 ]
             )
