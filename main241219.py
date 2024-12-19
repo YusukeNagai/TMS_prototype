@@ -8,6 +8,7 @@ import tempfile
 import subprocess
 import pandas as pd
 import time  # 追加
+import re  # 追加
 
 # CSSのスタイル設定
 st.markdown("""
@@ -258,20 +259,37 @@ if uploaded_file is not None:
 
             # 要約部分を抽出
             lines = topic_content.split("\n")
-            summary = lines[0] if lines[0].lower().startswith("要約") else "記載なし"
-            topic_lines = lines[1:] if summary != "記載なし" else lines
+            summary = "記載なし"
+            topic_lines = []
 
-            # 分類された話題をデータフレーム化
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue  # 空行をスキップ
+                if line.lower().startswith("要約"):
+                    if ":" in line:
+                        summary = line.split(":", 1)[1].strip()
+                    else:
+                        summary = line
+                    continue  # 要約行をスキップ
+                if re.match(r'^\d+\.', line):
+                    continue  # 大項目（数字とドットで始まる行）をスキップ
+                topic_lines.append(line)
+
             categories = []
             values = []
+
             for line in topic_lines:
                 if ":" in line:
                     c, v = line.split(":", 1)
-                    categories.append(c.strip())
-                    values.append(v.strip())
+                    c = c.strip()
+                    v = v.strip()
+                    if c and v:
+                        categories.append(c)
+                        values.append(v)
                 else:
-                    categories.append(line.strip())
-                    values.append("記載なし")
+                    # コロンがない行はスキップ
+                    continue
 
             df = pd.DataFrame({"項目": categories, "内容": values})
 
