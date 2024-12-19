@@ -56,7 +56,8 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 # MP3からWAVへの変換関数
 def convert_mp3_to_wav(mp3_file_path, wav_file_path):
     try:
-        subprocess.run(['ffmpeg', '-y', '-i', mp3_file_path, wav_file_path], check=True)
+        # サンプリングレートを8000Hzに設定
+        subprocess.run(['ffmpeg', '-y', '-i', mp3_file_path, '-ar', '8000', wav_file_path], check=True)
     except subprocess.CalledProcessError as e:
         st.error(f"ffmpegの変換に失敗しました: {e}")
         return False
@@ -100,8 +101,8 @@ if uploaded_file is not None:
         timing['MP3 to WAV変換'] = end_time - start_time
         progress_bar.progress(40)
         try:
-            with wave.open(wav_file_path, 'rb') as f:
-                fr = f.getframerate()
+            # サンプリングレートを固定で8000Hzに設定
+            fr = 8000
 
             # 音声の文字起こし
             start_time = time.perf_counter()
@@ -109,7 +110,7 @@ if uploaded_file is not None:
             client = speech.SpeechClient()
             config = speech.RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=fr,
+                sample_rate_hertz=fr,  # サンプリングレートを8000Hzに固定
                 language_code='ja-JP'
             )
             streaming_config = speech.StreamingRecognitionConfig(config=config)
