@@ -2,7 +2,7 @@ import os
 import wave
 import json
 import streamlit as st
-from google.cloud import speech
+from google.cloud import speech, storage
 import openai
 import tempfile
 import subprocess
@@ -47,11 +47,19 @@ div[data-testid="stFileUploader"]:hover {
 
 # OpenAIとGoogle CloudのAPIキー設定
 openai.api_key = st.secrets["openai"]["api_key"]
+
+# Google Cloudの認証情報とGCSバケット名をシークレットから取得
 google_credentials_data = st.secrets["GOOGLE_CREDENTIALS"]
+gcs_bucket_name = st.secrets["GCS_BUCKET_NAME"]
+
+# 認証情報を一時ファイルに書き出し
 with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as cred_file:
     json.dump(dict(google_credentials_data), cred_file)
     google_credentials_path = cred_file.name
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
+
+# GCSクライアントの初期化
+storage_client = storage.Client()
 
 # MP3からWAVへの変換関数（最適化およびサンプリングレート変更）
 def convert_mp3_to_wav(mp3_file_path, wav_file_path, sample_rate=8000):
@@ -66,6 +74,27 @@ def convert_mp3_to_wav(mp3_file_path, wav_file_path, sample_rate=8000):
         st.error(f"ffmpegの変換に失敗しました: {e}")
         return False
     return True
+
+# WAVファイルをGCSにアップロードする関数
+def upload_to_gcs(wav_file_path, destination_blob_name):
+    try:
+        bucket = storage_client.bucket(gcs_bucket_name)
+        blob = bucket.blob(destination_blob_name)
+        blob.upload_from_filename(wav_file_path)
+        gcs_uri = f"gs://{gcs_bucket_name}/{destination_blob_name}"
+        return gcs_uri
+    except Exception as e:
+        st.error(f"GCSへのアップロードに失敗しました: {e}")
+        return None
+
+# GCSからファイルを削除する関数（クリーンアップ用）
+def delete_from_gcs(blob_name):
+    try:
+        bucket = storage_client.bucket(gcs_bucket_name)
+        blob = bucket.blob(blob_name)
+        blob.delete()
+    except Exception as e:
+        st.warning(f"GCSからのファイル削除に失敗しました: {e}")
 
 # アプリケーションUI
 st.markdown("<h1 style='text-align:center;'>音声ファイル処理と話題分類</h1>", unsafe_allow_html=True)
@@ -104,21 +133,28 @@ if uploaded_file is not None:
                 n_frames = f.getnframes()
                 duration = n_frames / fr
 
-            # 音声の文字起こし（非同期認識に変更）
+            # 音声ファイルの長さに応じて認識方法を選択
+            # 今回は常に非同期認識を使用
+
+            # WAVファイルをGCSにアップロード
+            blob_name = f"uploaded_audio_{int(time.time())}.wav"
+            gcs_uri = upload_to_gcs(wav_file_path, blob_name)
+            if not gcs_uri:
+                raise Exception("GCSへのアップロードに失敗しました。")
+
+            # 音声の文字起こし（非同期認識に変更、GCS URIを使用）
             start_time = time.perf_counter()
             progress_bar.progress(40)
             client = speech.SpeechClient()
 
-            with open(wav_file_path, 'rb') as audio_file:
-                content = audio_file.read()
-
-            audio = speech.RecognitionAudio(content=content)
             config = speech.RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
                 sample_rate_hertz=8000,  # サンプリングレートを8000Hzに設定
                 language_code='ja-JP',
                 enable_automatic_punctuation=True
             )
+
+            audio = speech.RecognitionAudio(uri=gcs_uri)
 
             # 非同期認識の実行
             operation = client.long_running_recognize(config=config, audio=audio)
@@ -319,6 +355,9 @@ _____________________________________________________________
             # リマインドメッセージの表示
             st.markdown("### 今後の質問事項")
             st.markdown("次回は食事や水分補給について聞いてみると、田中さんの健康管理に関する理解が深まりそうです。")
+
+            # GCSから音声ファイルを削除（クリーンアップ）
+            delete_from_gcs(blob_name)
 
         except Exception as e:
             st.error(f"処理に失敗しました: {e}")
