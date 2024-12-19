@@ -53,13 +53,13 @@ with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as cred
     google_credentials_path = cred_file.name
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 
-# MP3からWAVへの変換関数（最適化）
+# MP3からWAVへの変換関数（最適化およびサンプリングレート変更）
 def convert_mp3_to_wav(mp3_file_path, wav_file_path):
     try:
-        # サンプリングレートを16000Hz、モノラルに変換
+        # サンプリングレートを1000Hz、モノラルに変換
         subprocess.run([
             'ffmpeg', '-y', '-i', mp3_file_path,
-            '-ar', '16000', '-ac', '1',
+            '-ar', '1000', '-ac', '1',
             wav_file_path
         ], check=True)
     except subprocess.CalledProcessError as e:
@@ -103,7 +103,7 @@ if uploaded_file is not None:
                 n_frames = f.getnframes()
                 duration = n_frames / fr
 
-            # 音声の文字起こし（バッチ認識に変更）
+            # 音声の文字起こし（非同期認識に変更）
             start_time = time.perf_counter()
             progress_bar.progress(40)
             client = speech.SpeechClient()
@@ -114,13 +114,17 @@ if uploaded_file is not None:
             audio = speech.RecognitionAudio(content=content)
             config = speech.RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=16000,  # ffmpegで設定したサンプリングレート
+                sample_rate_hertz=1000,  # ユーザーの要求により1000Hzに設定
                 language_code='ja-JP',
                 enable_automatic_punctuation=True
             )
 
-            # バッチ認識の実行
-            response = client.recognize(config=config, audio=audio)
+            # 非同期認識の実行
+            operation = client.long_running_recognize(config=config, audio=audio)
+
+            # 処理中のステータス更新
+            with st.spinner("音声の文字起こしを実行中です…"):
+                response = operation.result(timeout=600)  # タイムアウトを600秒に設定
 
             transcribed_text = ""
             for result in response.results:
