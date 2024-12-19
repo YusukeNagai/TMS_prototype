@@ -7,8 +7,8 @@ import openai
 import tempfile
 import subprocess
 import pandas as pd
-import time  # 追加
-import re  # 追加
+import time
+import re
 
 # CSSのスタイル設定
 st.markdown("""
@@ -53,23 +53,37 @@ with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as cred
     google_credentials_path = cred_file.name
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 
-# MP3からWAVへの変換関数
-def convert_mp3_to_wav(mp3_file_path, wav_file_path):
+# MP3からWAVへの変換関数（サンプリングレートを16kHzに設定）
+def convert_mp3_to_wav(mp3_file_path, wav_file_path, sample_rate=16000):
     try:
-        subprocess.run(['ffmpeg', '-y', '-i', mp3_file_path, wav_file_path], check=True)
+        subprocess.run(['ffmpeg', '-y', '-i', mp3_file_path, '-ar', str(sample_rate), wav_file_path], check=True)
     except subprocess.CalledProcessError as e:
         st.error(f"ffmpegの変換に失敗しました: {e}")
         return False
     return True
 
-# 音声ファイルをチャンクに分割する関数
-def generate_audio_chunks(file_path, chunk_size=4096):
-    with open(file_path, 'rb') as audio_file:
-        while True:
-            chunk = audio_file.read(chunk_size)
-            if not chunk:
-                break
-            yield speech.StreamingRecognizeRequest(audio_content=chunk)
+# 音声の文字起こし（非同期認識）
+def transcribe_audio(wav_file_path, sample_rate):
+    client = speech.SpeechClient()
+    with wave.open(wav_file_path, 'rb') as f:
+        audio_content = f.readframes(f.getnframes())
+
+    audio = speech.RecognitionAudio(content=audio_content)
+    config = speech.RecognitionConfig(
+        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+        sample_rate_hertz=sample_rate,
+        language_code='ja-JP',
+        model='default',  # 必要に応じて変更
+        enable_automatic_punctuation=True  # 必要に応じて追加
+    )
+
+    operation = client.long_running_recognize(config=config, audio=audio)
+    response = operation.result(timeout=180)  # タイムアウトを調整
+
+    transcribed_text = ""
+    for result in response.results:
+        transcribed_text += result.alternatives[0].transcript + '\n'
+    return transcribed_text
 
 # アプリケーションUI
 st.markdown("<h1 style='text-align:center;'>音声ファイル処理と話題分類</h1>", unsafe_allow_html=True)
@@ -98,35 +112,21 @@ if uploaded_file is not None:
     if convert_mp3_to_wav(mp3_file_path, wav_file_path):
         end_time = time.perf_counter()  # 終了時間
         timing['MP3 to WAV変換'] = end_time - start_time
-        progress_bar.progress(40)
+        progress_bar.progress(30)
         try:
             with wave.open(wav_file_path, 'rb') as f:
                 fr = f.getframerate()
 
-            # 音声の文字起こし
+            # 音声の文字起こし（非同期）
             start_time = time.perf_counter()
-            progress_bar.progress(50)
-            client = speech.SpeechClient()
-            config = speech.RecognitionConfig(
-                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=fr,
-                language_code='ja-JP'
-            )
-            streaming_config = speech.StreamingRecognitionConfig(config=config)
-            requests = generate_audio_chunks(wav_file_path)
-
-            responses = client.streaming_recognize(config=streaming_config, requests=requests)
-
-            transcribed_text = ""
-            for response in responses:
-                for result in response.results:
-                    transcribed_text += result.alternatives[0].transcript + '\n'
+            progress_bar.progress(40)
+            transcribed_text = transcribe_audio(wav_file_path, fr)
             end_time = time.perf_counter()
             timing['音声の文字起こし'] = end_time - start_time
 
             # 話題分類
             start_time = time.perf_counter()
-            progress_bar.progress(85)
+            progress_bar.progress(70)
             response = openai.ChatCompletion.create(
                 model="gpt-4",
                 messages=[
