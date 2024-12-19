@@ -54,12 +54,12 @@ with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as cred
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 
 # MP3からWAVへの変換関数（最適化およびサンプリングレート変更）
-def convert_mp3_to_wav(mp3_file_path, wav_file_path):
+def convert_mp3_to_wav(mp3_file_path, wav_file_path, sample_rate=8000):
     try:
-        # サンプリングレートを1000Hz、モノラルに変換
+        # サンプリングレートを8000Hz、モノラルに変換
         subprocess.run([
             'ffmpeg', '-y', '-i', mp3_file_path,
-            '-ar', '1000', '-ac', '1',
+            '-ar', str(sample_rate), '-ac', '1',
             wav_file_path
         ], check=True)
     except subprocess.CalledProcessError as e:
@@ -91,7 +91,8 @@ if uploaded_file is not None:
     # MP3→WAV変換
     start_time = time.perf_counter()
     progress_bar.progress(10)
-    if convert_mp3_to_wav(mp3_file_path, wav_file_path):
+    # サンプリングレートを8000Hzに設定
+    if convert_mp3_to_wav(mp3_file_path, wav_file_path, sample_rate=8000):
         end_time = time.perf_counter()
         timing['MP3 to WAV変換'] = end_time - start_time
         progress_bar.progress(30)
@@ -114,7 +115,7 @@ if uploaded_file is not None:
             audio = speech.RecognitionAudio(content=content)
             config = speech.RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=1000,  # ユーザーの要求により1000Hzに設定
+                sample_rate_hertz=8000,  # サンプリングレートを8000Hzに設定
                 language_code='ja-JP',
                 enable_automatic_punctuation=True
             )
