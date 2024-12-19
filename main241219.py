@@ -53,37 +53,19 @@ with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as cred
     google_credentials_path = cred_file.name
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 
-# MP3からWAVへの変換関数（サンプリングレートを16kHzに設定）
-def convert_mp3_to_wav(mp3_file_path, wav_file_path, sample_rate=16000):
+# MP3からWAVへの変換関数（最適化）
+def convert_mp3_to_wav(mp3_file_path, wav_file_path):
     try:
-        subprocess.run(['ffmpeg', '-y', '-i', mp3_file_path, '-ar', str(sample_rate), wav_file_path], check=True)
+        # サンプリングレートを16000Hz、モノラルに変換
+        subprocess.run([
+            'ffmpeg', '-y', '-i', mp3_file_path,
+            '-ar', '16000', '-ac', '1',
+            wav_file_path
+        ], check=True)
     except subprocess.CalledProcessError as e:
         st.error(f"ffmpegの変換に失敗しました: {e}")
         return False
     return True
-
-# 音声の文字起こし（非同期認識）
-def transcribe_audio(wav_file_path, sample_rate):
-    client = speech.SpeechClient()
-    with wave.open(wav_file_path, 'rb') as f:
-        audio_content = f.readframes(f.getnframes())
-
-    audio = speech.RecognitionAudio(content=audio_content)
-    config = speech.RecognitionConfig(
-        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=sample_rate,
-        language_code='ja-JP',
-        model='default',  # 必要に応じて変更
-        enable_automatic_punctuation=True  # 必要に応じて追加
-    )
-
-    operation = client.long_running_recognize(config=config, audio=audio)
-    response = operation.result(timeout=180)  # タイムアウトを調整
-
-    transcribed_text = ""
-    for result in response.results:
-        transcribed_text += result.alternatives[0].transcript + '\n'
-    return transcribed_text
 
 # アプリケーションUI
 st.markdown("<h1 style='text-align:center;'>音声ファイル処理と話題分類</h1>", unsafe_allow_html=True)
@@ -107,26 +89,50 @@ if uploaded_file is not None:
     timing = {}
 
     # MP3→WAV変換
-    start_time = time.perf_counter()  # 開始時間
+    start_time = time.perf_counter()
     progress_bar.progress(10)
     if convert_mp3_to_wav(mp3_file_path, wav_file_path):
-        end_time = time.perf_counter()  # 終了時間
+        end_time = time.perf_counter()
         timing['MP3 to WAV変換'] = end_time - start_time
         progress_bar.progress(30)
         try:
             with wave.open(wav_file_path, 'rb') as f:
                 fr = f.getframerate()
+                channels = f.getnchannels()
+                sampwidth = f.getsampwidth()
+                n_frames = f.getnframes()
+                duration = n_frames / fr
 
-            # 音声の文字起こし（非同期）
+            # 音声の文字起こし（バッチ認識に変更）
             start_time = time.perf_counter()
             progress_bar.progress(40)
-            transcribed_text = transcribe_audio(wav_file_path, fr)
+            client = speech.SpeechClient()
+
+            with open(wav_file_path, 'rb') as audio_file:
+                content = audio_file.read()
+
+            audio = speech.RecognitionAudio(content=content)
+            config = speech.RecognitionConfig(
+                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+                sample_rate_hertz=16000,  # ffmpegで設定したサンプリングレート
+                language_code='ja-JP',
+                enable_automatic_punctuation=True
+            )
+
+            # バッチ認識の実行
+            response = client.recognize(config=config, audio=audio)
+
+            transcribed_text = ""
+            for result in response.results:
+                transcribed_text += result.alternatives[0].transcript + '\n'
+
             end_time = time.perf_counter()
             timing['音声の文字起こし'] = end_time - start_time
+            progress_bar.progress(70)
 
             # 話題分類
             start_time = time.perf_counter()
-            progress_bar.progress(70)
+            progress_bar.progress(80)
             response = openai.ChatCompletion.create(
                 model="gpt-4",
                 messages=[
@@ -222,7 +228,7 @@ _____________________________________________________________
 # 出力形式
 
 - 各要約と項目の内容は短く、簡潔な文でまとめてください。
-- 形式例: `要約: [該当内容]`
+- 形式例: 要約: [該当内容]
 
 # 例
 **出力**
