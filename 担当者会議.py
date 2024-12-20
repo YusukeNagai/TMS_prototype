@@ -149,17 +149,12 @@ if uploaded_file is not None:
             timing['音声の文字起こし(分割並列)'] = end_time - start_time
             progress_bar.progress(85)
 
-            # OpenAI APIで担当者会議用要約と項目整理
-            # プロンプトでは、担当者会議における議論内容を整理し、共通項目や目的別項目に即した情報を抽出させる。
-            start_time = time.perf_counter()
-            response = openai.ChatCompletion.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
-                    {
-                        "role": "user",
-                        "content":
-                        """
+            # OpenAI API用プロンプトメッセージ定義
+            prompt_messages = [
+                {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
+                {
+                    "role": "user",
+                    "content": """
 以下はサービス担当者会議において考慮すべき共通および状況別の記載項目です。これらを参考に、与えられた音声記録を以下の手順で要約・整理してください。
 
 【総合的な記載項目（共通項目）】
@@ -197,15 +192,16 @@ if uploaded_file is not None:
 
 以下に音声記録が与えられます。これを踏まえて、上述の項目に沿ったまとめを行ってください。
 """
-                    },
+                },
                 {"role": "user", "content": full_transcript}
             ]
 
+            # OpenAI APIで要約
+            start_time = time.perf_counter()
             response = openai.ChatCompletion.create(
                 model="gpt-4",
                 messages=prompt_messages
             )
-
             topic_content = response['choices'][0]['message']['content'].strip()
             end_time = time.perf_counter()
             timing['担当者会議用要約 (OpenAI)'] = end_time - start_time
