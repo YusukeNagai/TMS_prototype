@@ -148,7 +148,7 @@ if uploaded_file is not None:
             # OpenAI APIで話題分類
             start_time = time.perf_counter()
             response = openai.ChatCompletion.create(
-                model="4o",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content":"あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。"},
                     {
