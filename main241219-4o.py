@@ -149,7 +149,7 @@ if uploaded_file is not None:
             timing['音声の文字起こし(分割並列)'] = end_time - start_time
 
             progress_bar.progress(85)
-            # OpenAI APIで話題分類
+            # OpenAI APIで話題分類と不足項目の抽出
             start_time = time.perf_counter()
             response = openai.ChatCompletion.create(
                 model="gpt-4",
@@ -167,6 +167,10 @@ if uploaded_file is not None:
 2. **話題の項目と内容の整理**
    - 要約した内容を更に分解し、話題に合わせた項目とその具体的な内容を整理して提示してください。
    - それぞれの項目と内容は「要約: 田中さんは～」の形式で記述してください。
+
+3. **不足している項目の抽出**
+   - 音声記録に含まれていない、または十分にカバーされていない項目をリストアップしてください。
+   - 各不足項目は「不足項目: [該当内容]」の形式で記述してください。
 
 下記の項目は音声記録にすべて含まれているわけではありません。音声記録に上がった項目のみ分類してください。
 
@@ -246,7 +250,16 @@ _____________________________________________________________
 # 出力形式
 
 - 各要約と項目の内容は短く、簡潔な文でまとめてください。
-- 形式例: `要約: [該当内容]`
+- 不足項目も同様に短く、簡潔な文でまとめてください。
+- 形式例:
+要約: [該当内容]
+
+コミュニケーション 視力：～
+
+不足項目: [該当内容]
+
+markdown
+コードをコピーする
 
 # 例
 
@@ -257,6 +270,11 @@ _____________________________________________________________
 要約: 田中さんは～
 
 コミュニケーション 視力：～
+
+不足項目: 食事摂取に関する具体的な情報が不足しています。
+
+css
+コードをコピーする
 
 # Notes
 
@@ -270,14 +288,15 @@ _____________________________________________________________
             )
             topic_content = response['choices'][0]['message']['content'].strip()
             end_time = time.perf_counter()
-            timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
+            timing['話題分類と不足項目の抽出 (OpenAI GPT-4)'] = end_time - start_time
 
             progress_bar.progress(100)
 
-            # 要約部分を抽出
+            # 要約と不足項目の部分を抽出
             lines = topic_content.split("\n")
             summary = "記載なし"
             topic_lines = []
+            missing_items = []
 
             for line in lines:
                 line = line.strip()
@@ -289,9 +308,15 @@ _____________________________________________________________
                     else:
                         summary = line
                     continue  # 要約行をスキップ
+                if line.lower().startswith("不足項目"):
+                    if ":" in line:
+                        missing_item = line.split(":", 1)[1].strip()
+                        missing_items.append(missing_item)
+                    continue  # 不足項目行をスキップ
                 if re.match(r'^\d+\.', line):
                     continue  # 大項目（数字とドットで始まる行）をスキップ
-                topic_lines.append(line)
+                if ":" in line:
+                    topic_lines.append(line)
 
             categories = []
             values = []
@@ -325,6 +350,15 @@ _____________________________________________________________
 
             st.table(df.style.apply(highlight_missing, subset=['内容']))
 
+            # 不足項目の表示
+            if missing_items:
+                st.markdown("### 今後の質問事項")
+                for item in missing_items:
+                    st.markdown(f"- {item}")
+            else:
+                st.markdown("### 今後の質問事項")
+                st.markdown("特に不足している項目は見当たりませんでした。")
+
             # 処理時間の表示
             st.markdown("### 処理時間")
             timing_df = pd.DataFrame({
@@ -332,10 +366,6 @@ _____________________________________________________________
                 "所要時間 (秒)": [f"{v:.2f}" for v in timing.values()]
             })
             st.table(timing_df)
-
-            # リマインドメッセージの表示
-            st.markdown("### 今後の質問事項")
-            st.markdown("次回は食事や水分補給について聞いてみると、田中さんの健康管理に関する理解が深まりそうです。")
 
         except Exception as e:
             st.error(f"処理に失敗しました: {e}")
