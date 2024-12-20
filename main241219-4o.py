@@ -65,7 +65,7 @@ def convert_mp3_to_wav(mp3_file_path, wav_file_path):
     return True
 
 # WAVファイルを分割する関数
-def split_audio_to_chunks(wav_file_path, chunk_length_ms=59000):
+def split_audio_to_chunks(wav_file_path, chunk_length_ms=50000):
     audio = AudioSegment.from_wav(wav_file_path)
     chunks = []
     for i in range(0, len(audio), chunk_length_ms):
@@ -123,7 +123,7 @@ if uploaded_file is not None:
         try:
             # 音声分割
             start_time = time.perf_counter()
-            chunks = split_audio_to_chunks(wav_file_path, chunk_length_ms=59000)  # 1分単位で分割
+            chunks = split_audio_to_chunks(wav_file_path, chunk_length_ms=50000)  # 1分単位で分割
             end_time = time.perf_counter()
             timing['音声分割'] = end_time - start_time
             progress_bar.progress(30)
@@ -266,7 +266,7 @@ _____________________________________________________________
             )
             topic_content = response['choices'][0]['message']['content'].strip()
             end_time = time.perf_counter()
-            timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
+            timing['話題分類 (OpenAI GPT-4o)'] = end_time - start_time
 
             progress_bar.progress(100)
 
