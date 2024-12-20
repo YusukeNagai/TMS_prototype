@@ -199,7 +199,7 @@ if uploaded_file is not None:
             # OpenAI APIで要約
             start_time = time.perf_counter()
             response = openai.ChatCompletion.create(
-                model="gpt-4",
+                model="gpt-4o",
                 messages=prompt_messages
             )
             topic_content = response['choices'][0]['message']['content'].strip()
