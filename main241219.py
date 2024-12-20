@@ -65,7 +65,7 @@ def convert_mp3_to_wav(mp3_file_path, wav_file_path):
     return True
 
 # WAVファイルを分割する関数
-def split_audio_to_chunks(wav_file_path, chunk_length_ms=60000):
+def split_audio_to_chunks(wav_file_path, chunk_length_ms=55000):
     audio = AudioSegment.from_wav(wav_file_path)
     chunks = []
     for i in range(0, len(audio), chunk_length_ms):
