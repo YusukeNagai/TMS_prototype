@@ -210,7 +210,6 @@ if uploaded_file is not None:
 
             # 結果の表示
             st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
-            st.markdown("### GPTの出力")
             st.markdown(f"<div style='padding:10px; font-size:1.2em; white-space: pre-wrap;'>{topic_content}</div>", unsafe_allow_html=True)
 
             # 処理時間の表示
