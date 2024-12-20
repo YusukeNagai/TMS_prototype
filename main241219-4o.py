@@ -55,10 +55,14 @@ with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as cred
     google_credentials_path = cred_file.name
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 
-# M4AからWAVへの変換関数
-def convert_m4a_to_wav(m4a_file_path, wav_file_path):
+# オーディオファイルからWAVへの変換関数
+def convert_to_wav(input_file_path, output_file_path):
     try:
-        subprocess.run(['ffmpeg', '-y', '-i', m4a_file_path, '-ar', '16000', '-ac', '1', wav_file_path], check=True)
+        # ffmpegを使用して入力ファイルをWAVに変換
+        subprocess.run([
+            'ffmpeg', '-y', '-i', input_file_path,
+            '-ar', '16000', '-ac', '1', output_file_path
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError as e:
         st.error(f"ffmpegの変換に失敗しました: {e}")
         return False
@@ -94,14 +98,14 @@ def transcribe_chunk(chunk_path, language_code='ja-JP'):
     return transcript
 
 st.markdown("<h1 style='text-align:center;'>音声ファイル処理と話題分類</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>M4Aファイルを以下にドラッグ＆ドロップまたはクリックして選択してください。</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;'>MP3またはM4Aファイルを以下にドラッグ＆ドロップまたはクリックして選択してください。</p>", unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("", type="m4a")
+uploaded_file = st.file_uploader("", type=["mp3", "m4a"])
 
 if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.m4a') as tmp_m4a:
-        tmp_m4a.write(uploaded_file.getvalue())
-        m4a_file_path = tmp_m4a.name
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{uploaded_file.type.split("/")[1]}') as tmp_input:
+        tmp_input.write(uploaded_file.getvalue())
+        input_file_path = tmp_input.name
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
         wav_file_path = tmp_wav.name
@@ -113,17 +117,17 @@ if uploaded_file is not None:
     # 処理時間を記録する辞書
     timing = {}
 
-    # M4A→WAV変換
+    # 入力ファイルからWAVへの変換
     start_time = time.perf_counter()
     progress_bar.progress(10)
-    if convert_m4a_to_wav(m4a_file_path, wav_file_path):
+    if convert_to_wav(input_file_path, wav_file_path):
         end_time = time.perf_counter()
-        timing['M4A to WAV変換'] = end_time - start_time
+        timing['ファイル変換 (WAV)'] = end_time - start_time
         progress_bar.progress(20)
         try:
             # 音声分割
             start_time = time.perf_counter()
-            chunks = split_audio_to_chunks(wav_file_path, chunk_length_ms=50000)  # 1分単位で分割
+            chunks = split_audio_to_chunks(wav_file_path, chunk_length_ms=50000)  # 50秒単位で分割
             end_time = time.perf_counter()
             timing['音声分割'] = end_time - start_time
             progress_bar.progress(30)
@@ -137,7 +141,7 @@ if uploaded_file is not None:
                     result = future.result()
                     transcripts.append(result)
                     # 進捗を更新 (最大30→80程度に分配)
-                    current_progress = 30 + int((i/len(chunks))*50)
+                    current_progress = 30 + int((i / len(chunks)) * 50)
                     progress_bar.progress(min(current_progress, 80))
 
             full_transcript = "\n".join(transcripts)
@@ -148,9 +152,9 @@ if uploaded_file is not None:
             # OpenAI APIで話題分類
             start_time = time.perf_counter()
             response = openai.ChatCompletion.create(
-                model="gpt-4o",
+                model="gpt-4",
                 messages=[
-                    {"role": "system", "content":"あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。"},
+                    {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。"},
                     {
                         "role": "user",
                         "content":
@@ -266,7 +270,7 @@ _____________________________________________________________
             )
             topic_content = response['choices'][0]['message']['content'].strip()
             end_time = time.perf_counter()
-            timing['話題分類 (OpenAI GPT-4o)'] = end_time - start_time
+            timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
 
             progress_bar.progress(100)
 
@@ -338,7 +342,7 @@ _____________________________________________________________
 
     # 一時ファイル削除
     try:
-        os.remove(m4a_file_path)
+        os.remove(input_file_path)
         os.remove(wav_file_path)
         for chunk in locals().get('chunks', []):
             try:
