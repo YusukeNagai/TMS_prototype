@@ -150,7 +150,6 @@ if uploaded_file is not None:
             response = openai.ChatCompletion.create(
                 model="o1-mini",
                 messages=[
-                    {"role": "system", "content":"。"},
                     {
                         "role": "user",
                         "content":
