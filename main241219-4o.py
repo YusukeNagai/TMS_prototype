@@ -254,8 +254,7 @@ _____________________________________________________________
 - 必ず情報がない場合は'記載なし'と明記してください。
 - 形式例:
  `要約: [該当内容]`
-...
-
+ ...
 
 # 例
 
@@ -280,107 +279,20 @@ _____________________________________________________________
 
             progress_bar.progress(100)
 
-            # 要約部分を抽出
-            lines = topic_content.split("\n")
-            summary = "記載なし"
-            topic_lines = []
-
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue  # 空行をスキップ
-                if line.lower().startswith("要約"):
-                    if ":" in line:
-                        summary = line.split(":", 1)[1].strip()
-                    else:
-                        summary = line
-                    continue  # 要約行をスキップ
-                if re.match(r'^\d+\.', line):
-                    continue  # 大項目（数字とドットで始まる行）をスキップ
-                topic_lines.append(line)
-
-            categories = []
-            values = []
-
-            for line in topic_lines:
-                if ":" in line:
-                    c, v = line.split(":", 1)
-                    c = c.strip()
-                    v = v.strip()
-                    if c and v:
-                        categories.append(c)
-                        values.append(v)
-                else:
-                    # コロンがない行はスキップ
-                    continue
-
-            df = pd.DataFrame({"項目": categories, "内容": values})
-
-            # 欠落している項目を特定
-            missing_categories = df[df['内容'] == "記載なし"]['項目'].tolist()
-
-            # 欠落項目がある場合、GPTに今後の質問事項を生成させる
-            future_questions = []
-            if missing_categories:
-                # 欠落項目を日本語でリスト化
-                missing_list = "\n".join([f"- {category}" for category in missing_categories])
-
-                # GPTに欠落項目に基づく質問事項を生成させる
-                reminder_response = openai.ChatCompletion.create(
-                    model="gpt-4",
-                    messages=[
-                        {"role": "system", "content": "あなたは介護領域における専門知識を持つアシスタントです。"},
-                        {
-                            "role": "user",
-                            "content":
-                            f"""
-以下の項目が音声記録に記載されていません(または'記載なし')。これらの項目に関連する今後の質問事項を3つ以上、具体的かつ簡潔に日本語で提案してください。
-
-欠落項目:
-{missing_list}
-
-# 出力形式
-
-- 各質問は箇条書きで記述してください。
-- 簡潔で具体的な質問文を使用してください。
-"""
-                        }
-                    ]
-                )
-                reminder_content = reminder_response['choices'][0]['message']['content'].strip()
-                # 質問をリストとして抽出
-                future_questions = re.findall(r'^\- (.+)$', reminder_content, re.MULTILINE)
-
             # 結果の表示
             st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
 
-            # 要約の表示
-            st.markdown("### 要約")
-            st.markdown(f"<div style='padding:10px; font-size:1.2em;'>{summary}</div>", unsafe_allow_html=True)
+            # GPTの出力を直接表示
+            st.markdown("### GPTの出力")
+            st.markdown(f"<div style='padding:10px; font-size:1.2em; white-space: pre-wrap;'>{topic_content}</div>", unsafe_allow_html=True)
 
-            # 分類された話題の表示
-            st.markdown("### 分類された話題")
-
-            def highlight_missing(s):
-                return ['background-color: #fdd' if v == "記載なし" else '' for v in s]
-
-            st.table(df.style.apply(highlight_missing, subset=['内容']))
-
-            # 処理時間の表示
+            # 処理時間の表示（必要に応じて保持）
             st.markdown("### 処理時間")
             timing_df = pd.DataFrame({
                 "ステップ": list(timing.keys()),
                 "所要時間 (秒)": [f"{v:.2f}" for v in timing.values()]
             })
             st.table(timing_df)
-
-            # リマインドメッセージの表示
-            st.markdown("### 今後の質問事項")
-            if future_questions:
-                for question in future_questions:
-                    st.markdown(f"- {question}")
-            else:
-                st.markdown("特に追加の質問事項はありません。")
 
         except Exception as e:
             st.error(f"処理に失敗しました: {e}")
