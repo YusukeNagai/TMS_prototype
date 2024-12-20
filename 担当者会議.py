@@ -152,6 +152,7 @@ if uploaded_file is not None:
             # OpenAI APIで担当者会議用要約と項目整理
             # プロンプトでは、担当者会議における議論内容を整理し、共通項目や目的別項目に即した情報を抽出させる。
             start_time = time.perf_counter()
+            model="gpt-4o",
             prompt_messages = [
                 {
                     "role": "system",
@@ -162,6 +163,7 @@ if uploaded_file is not None:
                     )
                 },
                 {
+                    
                     "role": "user",
                     "content": """
 以下はサービス担当者会議において考慮すべき共通および状況別の記載項目です。これらを参考に、与えられた音声記録を以下の手順で要約・整理してください。
