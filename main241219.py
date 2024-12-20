@@ -7,8 +7,10 @@ import openai
 import tempfile
 import subprocess
 import pandas as pd
-import time  # 追加
-import re  # 追加
+import time
+import re
+from pydub import AudioSegment
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # CSSのスタイル設定
 st.markdown("""
@@ -56,22 +58,41 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 # MP3からWAVへの変換関数
 def convert_mp3_to_wav(mp3_file_path, wav_file_path):
     try:
-        subprocess.run(['ffmpeg', '-y', '-i', mp3_file_path, wav_file_path], check=True)
+        subprocess.run(['ffmpeg', '-y', '-i', mp3_file_path, '-ar', '16000', '-ac', '1', wav_file_path], check=True)
     except subprocess.CalledProcessError as e:
         st.error(f"ffmpegの変換に失敗しました: {e}")
         return False
     return True
 
-# 音声ファイルをチャンクに分割する関数
-def generate_audio_chunks(file_path, chunk_size=4096):
-    with open(file_path, 'rb') as audio_file:
-        while True:
-            chunk = audio_file.read(chunk_size)
-            if not chunk:
-                break
-            yield speech.StreamingRecognizeRequest(audio_content=chunk)
+# WAVファイルを分割する関数
+def split_audio_to_chunks(wav_file_path, chunk_length_ms=60000):
+    audio = AudioSegment.from_wav(wav_file_path)
+    chunks = []
+    for i in range(0, len(audio), chunk_length_ms):
+        chunk = audio[i:i+chunk_length_ms]
+        # 一時ファイルとして保存
+        tmp_chunk = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+        chunk.export(tmp_chunk.name, format="wav")
+        chunks.append(tmp_chunk.name)
+    return chunks
 
-# アプリケーションUI
+# Google Speech-to-Textで文字起こしを行う関数（各チャンク用）
+def transcribe_chunk(chunk_path, language_code='ja-JP'):
+    client = speech.SpeechClient()
+    with open(chunk_path, 'rb') as f:
+        content = f.read()
+    audio = speech.RecognitionAudio(content=content)
+    config = speech.RecognitionConfig(
+        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+        sample_rate_hertz=16000,
+        language_code=language_code
+    )
+    response = client.recognize(config=config, audio=audio)
+    transcript = ""
+    for result in response.results:
+        transcript += result.alternatives[0].transcript
+    return transcript
+
 st.markdown("<h1 style='text-align:center;'>音声ファイル処理と話題分類</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center;'>MP3ファイルを以下にドラッグ＆ドロップまたはクリックして選択してください。</p>", unsafe_allow_html=True)
 
@@ -93,40 +114,39 @@ if uploaded_file is not None:
     timing = {}
 
     # MP3→WAV変換
-    start_time = time.perf_counter()  # 開始時間
+    start_time = time.perf_counter()
     progress_bar.progress(10)
     if convert_mp3_to_wav(mp3_file_path, wav_file_path):
-        end_time = time.perf_counter()  # 終了時間
+        end_time = time.perf_counter()
         timing['MP3 to WAV変換'] = end_time - start_time
-        progress_bar.progress(40)
+        progress_bar.progress(20)
         try:
-            with wave.open(wav_file_path, 'rb') as f:
-                fr = f.getframerate()
-
-            # 音声の文字起こし
+            # 音声分割
             start_time = time.perf_counter()
-            progress_bar.progress(50)
-            client = speech.SpeechClient()
-            config = speech.RecognitionConfig(
-                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=fr,
-                language_code='ja-JP'
-            )
-            streaming_config = speech.StreamingRecognitionConfig(config=config)
-            requests = generate_audio_chunks(wav_file_path)
-
-            responses = client.streaming_recognize(config=streaming_config, requests=requests)
-
-            transcribed_text = ""
-            for response in responses:
-                for result in response.results:
-                    transcribed_text += result.alternatives[0].transcript + '\n'
+            chunks = split_audio_to_chunks(wav_file_path, chunk_length_ms=60000)  # 1分単位で分割
             end_time = time.perf_counter()
-            timing['音声の文字起こし'] = end_time - start_time
+            timing['音声分割'] = end_time - start_time
+            progress_bar.progress(30)
 
-            # 話題分類
+            # 並列処理で文字起こし
             start_time = time.perf_counter()
+            transcripts = []
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = [executor.submit(transcribe_chunk, chunk) for chunk in chunks]
+                for i, future in enumerate(as_completed(futures), start=1):
+                    result = future.result()
+                    transcripts.append(result)
+                    # 進捗を更新 (最大30→80程度に分配)
+                    current_progress = 30 + int((i/len(chunks))*50)
+                    progress_bar.progress(min(current_progress, 80))
+
+            full_transcript = "\n".join(transcripts)
+            end_time = time.perf_counter()
+            timing['音声の文字起こし(分割並列)'] = end_time - start_time
+
             progress_bar.progress(85)
+            # OpenAI APIで話題分類
+            start_time = time.perf_counter()
             response = openai.ChatCompletion.create(
                 model="gpt-4",
                 messages=[
@@ -229,15 +249,10 @@ _____________________________________________________________
 **入力**
 こんにちは、田中さん～
 
-markdown
-コードをコピーする
-
 **出力**
-要約: 田中さんは～（実際に要約する際は、内容や項目の詳細情報を記載します）
+要約: 田中さんは～
 
 コミュニケーション 視力：～
-css
-コードをコピーする
 
 # Notes
 
@@ -246,7 +261,7 @@ css
 - 情報の非対称性や誤解を避けるため、明確で簡潔な表現を心がけてください。
 """
                     },
-                    {"role": "user", "content": transcribed_text}
+                    {"role": "user", "content": full_transcript}
                 ]
             )
             topic_content = response['choices'][0]['message']['content'].strip()
@@ -325,5 +340,10 @@ css
     try:
         os.remove(mp3_file_path)
         os.remove(wav_file_path)
+        for chunk in locals().get('chunks', []):
+            try:
+                os.remove(chunk)
+            except:
+                pass
     except Exception as e:
         st.warning(f"一時ファイルの削除に失敗しました: {e}")
