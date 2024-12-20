@@ -97,8 +97,8 @@ def transcribe_chunk(chunk_path, language_code='ja-JP'):
         transcript += result.alternatives[0].transcript
     return transcript
 
-st.markdown("<h1 style='text-align:center;'>担当者会議音声記録ツール</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>MP3またはM4Aファイルを以下にドラッグ＆ドロップまたはクリックして選択してください。</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;'>担当者会議用議事録作成支援ツール</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;'>MP3またはM4Aファイルを以下にアップロードしてください。</p>", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("", type=["mp3", "m4a"])
 
@@ -147,107 +147,99 @@ if uploaded_file is not None:
             full_transcript = "\n".join(transcripts)
             end_time = time.perf_counter()
             timing['音声の文字起こし(分割並列)'] = end_time - start_time
-
             progress_bar.progress(85)
-            # OpenAI APIで話題分類
-            start_time = time.perf_counter()
-            # 担当者会議用のプロンプト
-            response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特に担当者会議に関する情報に基づいて、議事録を作成することができます。情報がない場合は必ず'記載なし'と記してください。"},
-                    {
-                        "role": "user",
-                        "content":
-                        """
-最下部に述べる音声記録を参考に、以下の手順で議事録の要約と内容整理を行ってください。
 
-1. **基本情報・開催目的**
+            # OpenAI APIで担当者会議用要約と項目整理
+            # プロンプトでは、担当者会議における議論内容を整理し、共通項目や目的別項目に即した情報を抽出させる。
+            start_time = time.perf_counter()
+            prompt_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "あなたは介護領域のサービス担当者会議に関する幅広い専門知識を持つアシスタントです。"
+                        "以下に示す担当者会議の記載事項および構造を参考に、音声議事録の内容を整理・要約します。"
+                        "情報がない場合は必ず'記載なし'と記してください。"
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": """
+以下はサービス担当者会議において考慮すべき共通および状況別の記載項目です。これらを参考に、与えられた音声記録を以下の手順で要約・整理してください。
+
+【総合的な記載項目（共通項目）】
+1. 基本情報・開催目的
    - 利用者氏名、要介護度、主介護者、参加者氏名・所属
    - 開催年月日・場所
-   - 開催の目的
+   - 開催目的（プラン見直し、退院支援、新規利用など）
+2. 検討した項目（番号付きで明示）
+   - 利用者・家族の希望確認
+   - 身体・生活状況の確認
+   - 利用サービス内容・回数・費用確認
+   - 各事業所の役割分担
+   - 医療的留意点
+   - 緊急時対応策
+   ...（話し合われたトピックに応じて追加）
+3. 検討内容（各項目に対応する具体的内容）
+   - 各項目ごとに利用者・家族意向、主治医意見、サービス事業所報告、留意事項など
+4. 結論（合意形成内容）
+   - プラン承認、サービス継続・変更内容、合意事項
+5. 残された課題・次回開催について
+   - 未解決事項、次回会議目安、緊急開催対応
+6. 欠席者照会内容（必要に応じて）
+   - 欠席者への情報提供・意見照会
+7. 文書交付等の扱い
+   - 議事録の情報共有方法
 
-2. **検討した項目**
-   - 利用者・家族の希望確認、身体・生活状況の確認、利用サービス内容・回数・費用確認、各事業所の役割分担、医療的留意点、緊急時対応策など
+【状況別補足項目】
+- 退院時対応、初回利用・認定更新時、デイサービス利用、ヘルパー利用、ショートステイ、福祉用具、疾患別留意点、看取り・ターミナル期、特定事業所加算などが含まれる場合は、該当項目において特記事項を整理。
 
-3. **検討内容**
-   - 各検討項目に対応する詳細内容
+【要求事項】
+1. 音声記録を要約し、上記の共通項目・補足項目に沿って情報を整理。
+2. 該当内容がなければ「記載なし」と明記。
+3. 利用者・家族、サービス提供者、医療者、ケアマネ等の発言内容を、上記の項目に即して整理。
+4. 最終的な結論、合意内容、残された課題、今後の開催予定などを明確に示す。
 
-4. **結論（合意形成内容）**
-   - 本日の協議内容に基づく最終方針、プラン承認の有無、サービス継続・変更の確定事項、関係者全員の合意が得られた点
-
-5. **残された課題・次回開催について**
-   - 今回解決に至らなかった点、状態観察期間、問題発生時の緊急開催要否、次回会議の目安
-
-6. **欠席者照会内容（必要に応じて）**
-   - 欠席したサービス担当者への情報提供内容・照会事項
-
-7. **文書交付等の扱い**
-   - 会議の要点を事業所に渡す義務の有無、情報共有としての提供方法
-
-# 出力形式
-
-- 各項目を漏れが無いように、丁寧な文章でまとめてください。
-- 必ず情報がない場合は'記載なし'と明記してください。
-- 形式例:
-基本情報・開催目的 利用者氏名：〇〇 要介護度：記載なし 主介護者：〇〇 参加者氏名・所属：〇〇
-
-開催年月日・場所：〇年〇月〇日、〇場所 開催の目的：〇〇
-
-検討した項目 ① 利用者・家族の希望確認 ② 身体・生活状況の確認 ...
-
-検討内容 ① 利用者・家族の意向： 本人『〇〇』 家族『〇〇』 ② 身体状況： 主治医意見書より〇〇 ...
-
-結論（合意形成内容） ・〇〇 ・〇〇 ...
-
-残された課題・次回開催について 残された課題： ・〇〇 次回会議の目安： ・〇〇
-
-欠席者照会内容（必要に応じて） ・〇〇
-
-文書交付等の扱い ・〇〇
-
-css
-コードをコピーする
-
-# Notes
-情報がない場合は必ず'記載なし'と記入すること。
+以下に音声記録が与えられます。これを踏まえて、上述の項目に沿ったまとめを行ってください。
 """
-                  },
-                  {"role": "user", "content": full_transcript}
-              ]
-          )
-          topic_content = response['choices'][0]['message']['content'].strip()
-          end_time = time.perf_counter()
-          timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
+                },
+                {"role": "user", "content": full_transcript}
+            ]
 
-          progress_bar.progress(100)
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=prompt_messages
+            )
 
-          # 結果の表示
-          st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
+            topic_content = response['choices'][0]['message']['content'].strip()
+            end_time = time.perf_counter()
+            timing['担当者会議用要約 (OpenAI)'] = end_time - start_time
 
-          # GPTの出力を直接表示
-          st.markdown("### GPTの出力")
-          st.markdown(f"<div style='padding:10px; font-size:1.2em; white-space: pre-wrap;'>{topic_content}</div>", unsafe_allow_html=True)
+            progress_bar.progress(100)
 
-          # 処理時間の表示（必要に応じて保持）
-          st.markdown("### 処理時間")
-          timing_df = pd.DataFrame({
-              "ステップ": list(timing.keys()),
-              "所要時間 (秒)": [f"{v:.2f}" for v in timing.values()]
-          })
-          st.table(timing_df)
+            # 結果の表示
+            st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
+            st.markdown("### GPTの出力")
+            st.markdown(f"<div style='padding:10px; font-size:1.2em; white-space: pre-wrap;'>{topic_content}</div>", unsafe_allow_html=True)
 
-      except Exception as e:
-          st.error(f"処理に失敗しました: {e}")
+            # 処理時間の表示
+            st.markdown("### 処理時間")
+            timing_df = pd.DataFrame({
+                "ステップ": list(timing.keys()),
+                "所要時間 (秒)": [f"{v:.2f}" for v in timing.values()]
+            })
+            st.table(timing_df)
 
-  # 一時ファイル削除
-  try:
-      os.remove(input_file_path)
-      os.remove(wav_file_path)
-      for chunk in locals().get('chunks', []):
-          try:
-              os.remove(chunk)
-          except:
-              pass
-  except Exception as e:
-      st.warning(f"一時ファイルの削除に失敗しました: {e}")
+        except Exception as e:
+            st.error(f"処理に失敗しました: {e}")
+
+    # 一時ファイル削除
+    try:
+        os.remove(input_file_path)
+        os.remove(wav_file_path)
+        for chunk in locals().get('chunks', []):
+            try:
+                os.remove(chunk)
+            except:
+                pass
+    except Exception as e:
+        st.warning(f"一時ファイルの削除に失敗しました: {e}")
