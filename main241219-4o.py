@@ -153,7 +153,7 @@ if uploaded_file is not None:
             start_time = time.perf_counter()
             # プロンプトに「情報がない場合は必ず'記載なし'と書くこと」を明示
             response = openai.ChatCompletion.create(
-                model="gpt-4",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
                     {
@@ -275,7 +275,7 @@ _____________________________________________________________
             )
             topic_content = response['choices'][0]['message']['content'].strip()
             end_time = time.perf_counter()
-            timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
+            timing['話題分類 (OpenAI GPT-4o)'] = end_time - start_time
 
             progress_bar.progress(100)
 
