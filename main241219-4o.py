@@ -55,10 +55,10 @@ with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as cred
     google_credentials_path = cred_file.name
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 
-# MP3からWAVへの変換関数
-def convert_mp3_to_wav(mp3_file_path, wav_file_path):
+# M4AからWAVへの変換関数
+def convert_m4a_to_wav(m4a_file_path, wav_file_path):
     try:
-        subprocess.run(['ffmpeg', '-y', '-i', mp3_file_path, '-ar', '16000', '-ac', '1', wav_file_path], check=True)
+        subprocess.run(['ffmpeg', '-y', '-i', m4a_file_path, '-ar', '16000', '-ac', '1', wav_file_path], check=True)
     except subprocess.CalledProcessError as e:
         st.error(f"ffmpegの変換に失敗しました: {e}")
         return False
@@ -94,14 +94,14 @@ def transcribe_chunk(chunk_path, language_code='ja-JP'):
     return transcript
 
 st.markdown("<h1 style='text-align:center;'>音声ファイル処理と話題分類</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>MP3ファイルを以下にドラッグ＆ドロップまたはクリックして選択してください。</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;'>M4Aファイルを以下にドラッグ＆ドロップまたはクリックして選択してください。</p>", unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("", type="mp3")
+uploaded_file = st.file_uploader("", type="m4a")
 
 if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_mp3:
-        tmp_mp3.write(uploaded_file.getvalue())
-        mp3_file_path = tmp_mp3.name
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.m4a') as tmp_m4a:
+        tmp_m4a.write(uploaded_file.getvalue())
+        m4a_file_path = tmp_m4a.name
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
         wav_file_path = tmp_wav.name
@@ -113,12 +113,12 @@ if uploaded_file is not None:
     # 処理時間を記録する辞書
     timing = {}
 
-    # MP3→WAV変換
+    # M4A→WAV変換
     start_time = time.perf_counter()
     progress_bar.progress(10)
-    if convert_mp3_to_wav(mp3_file_path, wav_file_path):
+    if convert_m4a_to_wav(m4a_file_path, wav_file_path):
         end_time = time.perf_counter()
-        timing['MP3 to WAV変換'] = end_time - start_time
+        timing['M4A to WAV変換'] = end_time - start_time
         progress_bar.progress(20)
         try:
             # 音声分割
@@ -338,7 +338,7 @@ _____________________________________________________________
 
     # 一時ファイル削除
     try:
-        os.remove(mp3_file_path)
+        os.remove(m4a_file_path)
         os.remove(wav_file_path)
         for chunk in locals().get('chunks', []):
             try:
