@@ -149,7 +149,7 @@ if uploaded_file is not None:
             timing['音声の文字起こし(分割並列)'] = end_time - start_time
 
             progress_bar.progress(85)
-            # OpenAI APIで話題分類と不足項目の抽出
+            # OpenAI APIで話題分類
             start_time = time.perf_counter()
             response = openai.ChatCompletion.create(
                 model="gpt-4",
@@ -167,10 +167,6 @@ if uploaded_file is not None:
 2. **話題の項目と内容の整理**
    - 要約した内容を更に分解し、話題に合わせた項目とその具体的な内容を整理して提示してください。
    - それぞれの項目と内容は「要約: 田中さんは～」の形式で記述してください。
-
-3. **不足している項目の抽出**
-   - 音声記録に含まれていない、または十分にカバーされていない項目をリストアップしてください。
-   - 各不足項目は「不足項目: [該当内容]」の形式で記述してください。
 
 下記の項目は音声記録にすべて含まれているわけではありません。音声記録に上がった項目のみ分類してください。
 
@@ -250,16 +246,7 @@ _____________________________________________________________
 # 出力形式
 
 - 各要約と項目の内容は短く、簡潔な文でまとめてください。
-- 不足項目も同様に短く、簡潔な文でまとめてください。
-- 形式例:
-要約: [該当内容]
-
-コミュニケーション 視力：～
-
-不足項目: [該当内容]
-
-markdown
-コードをコピーする
+- 形式例: `要約: [該当内容]`
 
 # 例
 
@@ -270,11 +257,6 @@ markdown
 要約: 田中さんは～
 
 コミュニケーション 視力：～
-
-不足項目: 食事摂取に関する具体的な情報が不足しています。
-
-css
-コードをコピーする
 
 # Notes
 
@@ -288,15 +270,14 @@ css
             )
             topic_content = response['choices'][0]['message']['content'].strip()
             end_time = time.perf_counter()
-            timing['話題分類と不足項目の抽出 (OpenAI GPT-4)'] = end_time - start_time
+            timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
 
             progress_bar.progress(100)
 
-            # 要約と不足項目の部分を抽出
+            # 要約部分を抽出
             lines = topic_content.split("\n")
             summary = "記載なし"
             topic_lines = []
-            missing_items = []
 
             for line in lines:
                 line = line.strip()
@@ -308,15 +289,9 @@ css
                     else:
                         summary = line
                     continue  # 要約行をスキップ
-                if line.lower().startswith("不足項目"):
-                    if ":" in line:
-                        missing_item = line.split(":", 1)[1].strip()
-                        missing_items.append(missing_item)
-                    continue  # 不足項目行をスキップ
                 if re.match(r'^\d+\.', line):
                     continue  # 大項目（数字とドットで始まる行）をスキップ
-                if ":" in line:
-                    topic_lines.append(line)
+                topic_lines.append(line)
 
             categories = []
             values = []
@@ -335,6 +310,41 @@ css
 
             df = pd.DataFrame({"項目": categories, "内容": values})
 
+            # 欠落している項目を特定
+            missing_categories = df[df['内容'] == "記載なし"]['項目'].tolist()
+
+            # 欠落項目がある場合、GPTに今後の質問事項を生成させる
+            future_questions = []
+            if missing_categories:
+                # 欠落項目を日本語でリスト化
+                missing_list = "\n".join([f"- {category}" for category in missing_categories])
+
+                # GPTに欠落項目に基づく質問事項を生成させる
+                reminder_response = openai.ChatCompletion.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "あなたは介護領域における専門知識を持つアシスタントです。"},
+                        {
+                            "role": "user",
+                            "content":
+                            f"""
+以下の項目が音声記録に記載されていません。これらの項目に関連する今後の質問事項を3つ以上、具体的かつ簡潔に日本語で提案してください。
+
+欠落項目:
+{missing_list}
+
+# 出力形式
+
+- 各質問は箇条書きで記述してください。
+- 簡潔で具体的な質問文を使用してください。
+"""
+                        }
+                    ]
+                )
+                reminder_content = reminder_response['choices'][0]['message']['content'].strip()
+                # 質問をリストとして抽出
+                future_questions = re.findall(r'^\- (.+)$', reminder_content, re.MULTILINE)
+
             # 結果の表示
             st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
 
@@ -350,15 +360,6 @@ css
 
             st.table(df.style.apply(highlight_missing, subset=['内容']))
 
-            # 不足項目の表示
-            if missing_items:
-                st.markdown("### 今後の質問事項")
-                for item in missing_items:
-                    st.markdown(f"- {item}")
-            else:
-                st.markdown("### 今後の質問事項")
-                st.markdown("特に不足している項目は見当たりませんでした。")
-
             # 処理時間の表示
             st.markdown("### 処理時間")
             timing_df = pd.DataFrame({
@@ -366,6 +367,15 @@ css
                 "所要時間 (秒)": [f"{v:.2f}" for v in timing.values()]
             })
             st.table(timing_df)
+
+            # リマインドメッセージの表示
+            if future_questions:
+                st.markdown("### 今後の質問事項")
+                for question in future_questions:
+                    st.markdown(f"- {question}")
+            else:
+                st.markdown("### 今後の質問事項")
+                st.markdown("特に追加の質問事項はありません。")
 
         except Exception as e:
             st.error(f"処理に失敗しました: {e}")
