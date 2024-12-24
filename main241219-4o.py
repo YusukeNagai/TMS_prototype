@@ -8,7 +8,7 @@ import subprocess
 import pandas as pd
 import time
 import re
-from pydub import AudioSegment, silence
+from pydub import AudioSegment
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 
@@ -85,24 +85,6 @@ def convert_to_wav(input_bytes, output_file_path):
         return False
     return True
 
-# 無音部分をトリミングする関数
-def trim_silence(input_wav_path, output_wav_path, silence_thresh=-40, min_silence_len=1000):
-    try:
-        audio = AudioSegment.from_wav(input_wav_path)
-        # 無音部分を検出して除去
-        non_silence_ranges = silence.detect_nonsilent(audio, min_silence_len=min_silence_len, silence_thresh=silence_thresh)
-        if not non_silence_ranges:
-            st.error("無音部分のみの音声ファイルです。")
-            return False
-        trimmed_audio = AudioSegment.empty()
-        for start, end in non_silence_ranges:
-            trimmed_audio += audio[start:end]
-        trimmed_audio.export(output_wav_path, format="wav")
-    except Exception as e:
-        st.error(f"無音トリミングに失敗しました: {e}")
-        return False
-    return True
-
 # WAVファイルを分割する関数（メモリ内で処理）
 def split_audio_to_chunks(wav_file_path, chunk_length_ms=50000):
     audio = AudioSegment.from_wav(wav_file_path)
@@ -155,33 +137,20 @@ if uploaded_file is not None:
     # 処理時間を記録する辞書
     timing = {}
 
-    try:
-        # 入力ファイルからWAVへの変換
-        start_time = time.perf_counter()
-        progress_bar.progress(10)
-        if convert_to_wav(input_bytes, wav_file_path):
-            end_time = time.perf_counter()
-            timing['ファイル変換 (WAV)'] = end_time - start_time
-            progress_bar.progress(20)
-
-            # 無音部分のトリミング
-            start_time = time.perf_counter()
-            trimmed_wav_path = wav_file_path.replace('.wav', '_trimmed.wav')
-            if trim_silence(wav_file_path, trimmed_wav_path, silence_thresh=-40, min_silence_len=1000):
-                timing['無音トリミング'] = time.perf_counter() - start_time
-                progress_bar.progress(30)
-            else:
-                # トリミングに失敗した場合は元のWAVを使用
-                trimmed_wav_path = wav_file_path
-                timing['無音トリミング'] = 0
-                progress_bar.progress(30)
-
+    # 入力ファイルからWAVへの変換
+    start_time = time.perf_counter()
+    progress_bar.progress(10)
+    if convert_to_wav(input_bytes, wav_file_path):
+        end_time = time.perf_counter()
+        timing['ファイル変換 (WAV)'] = end_time - start_time
+        progress_bar.progress(20)
+        try:
             # 音声分割
             start_time = time.perf_counter()
-            chunks = split_audio_to_chunks(trimmed_wav_path, chunk_length_ms=50000)  # 50秒単位で分割
+            chunks = split_audio_to_chunks(wav_file_path, chunk_length_ms=50000)  # 50秒単位で分割
             end_time = time.perf_counter()
             timing['音声分割'] = end_time - start_time
-            progress_bar.progress(40)
+            progress_bar.progress(30)
 
             # Google Speech-to-Text クライアントの再利用
             client = speech.SpeechClient()
@@ -194,8 +163,8 @@ if uploaded_file is not None:
                 for i, future in enumerate(as_completed(futures), start=1):
                     result = future.result()
                     transcripts.append(result)
-                    # 進捗を更新 (最大40→80程度に分配)
-                    current_progress = 40 + int((i / len(chunks)) * 40)
+                    # 進捗を更新 (最大30→80程度に分配)
+                    current_progress = 30 + int((i / len(chunks)) * 50)
                     progress_bar.progress(min(current_progress, 80))
 
             full_transcript = "\n".join(transcripts)
@@ -207,7 +176,7 @@ if uploaded_file is not None:
             start_time = time.perf_counter()
             # プロンプトに「情報がない場合は必ず'記載なし'と書くこと」を明示
             response = openai.ChatCompletion.create(
-                model="gpt-4",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
                     {
@@ -316,7 +285,7 @@ _____________________________________________________________
 
 - 各要約と項目の内容は漏れが無いように、丁寧な文でまとめてください。
 - 形式例:
- `要約: [該当内容]`
+ 要約: [該当内容]
  ...
 
 # 例
@@ -335,7 +304,7 @@ _____________________________________________________________
             )
             topic_content = response['choices'][0]['message']['content'].strip()
             end_time = time.perf_counter()
-            timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
+            timing['話題分類 (OpenAI GPT-4o)'] = end_time - start_time
 
             progress_bar.progress(100)
 
@@ -354,17 +323,19 @@ _____________________________________________________________
             })
             st.table(timing_df)
 
-    except Exception as e:
-        st.error(f"処理に失敗しました: {e}")
+        except Exception as e:
+            st.error(f"処理に失敗しました: {e}")
 
-    finally:
-        # 一時ファイル削除
-        try:
-            os.remove(wav_file_path)
-        except Exception as e:
-            st.warning(f"一時ファイルの削除に失敗しました: {e}")
-        try:
-            if 'trimmed_wav_path' in locals() and trimmed_wav_path != wav_file_path:
-                os.remove(trimmed_wav_path)
-        except Exception as e:
-            st.warning(f"トリミング後の一時ファイルの削除に失敗しました: {e}")
+    # 一時ファイル削除
+    try:
+        os.remove(wav_file_path)
+    except Exception as e:
+        st.warning(f"一時ファイルの削除に失敗しました: {e}")
+
+＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿
+上記のプログラムのマイナーチェンジをしたい。
+音声ファイル内の音声が含まれていない部分をあらかじめトリミングするような操作はできるか？
+複数の方法の選択肢を挙げ、最も筋の良い方法を採用せよ。
+
+
+プログラムに実装し、プログラム全体を書き換えろ
