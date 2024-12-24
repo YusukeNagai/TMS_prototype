@@ -27,6 +27,7 @@ table {
 textarea {
     font-size: 1.3em;
 }
+/* ファイルアップロード領域のスタイル */
 div[data-testid="stFileUploader"] {
     text-align: center;
     border: 4px dashed #ccc;
@@ -45,13 +46,14 @@ div[data-testid="stFileUploader"]:hover {
     border-color: #aaa;
 }
 /* デフォルトのドラッグ＆ドロップテキストを非表示に */
-div[data-testid="stFileUploadDropzone"] > div:nth-child(2) {
+div[data-testid="stFileUploadDropzone"] * {
     display: none;
 }
-/* 独自のテキストを表示 */
+/* 独自の日本語テキストを表示 */
 div[data-testid="stFileUploadDropzone"]::before {
-    content: "MP3またはM4Aファイルをドラッグ＆ドロップするか、クリックして選択してください。";
+    content: "MP3またはM4Aファイルをドラッグ＆ドロップするか、クリックして選択してください。\nファイルサイズの制限: 200MB";
     display: block;
+    white-space: pre-wrap;
     text-align: center;
     font-size: 1.5em;
     color: #333;
@@ -110,72 +112,78 @@ def transcribe_chunk(chunk_path, language_code='ja-JP'):
         transcript += result.alternatives[0].transcript
     return transcript
 
+# タイトルの表示
 st.markdown("<h1 style='text-align:center;'>アセスメント補助ツール</h1>", unsafe_allow_html=True)
 
 # ファイルアップロード部分を日本語化
 uploaded_file = st.file_uploader(
-    "MP3またはM4Aファイルをドラッグ＆ドロップするか、クリックして選択してください。",
+    label="",  # ラベルを空に設定し、CSSでカスタムテキストを表示
     type=["mp3", "m4a"]
 )
 
 if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{uploaded_file.type.split("/")[1]}') as tmp_input:
-        tmp_input.write(uploaded_file.getvalue())
-        input_file_path = tmp_input.name
+    # 一時ファイルに保存
+    file_extension = uploaded_file.name.split('.')[-1].lower()
+    if file_extension not in ['mp3', 'm4a']:
+        st.error("対応していないファイル形式です。MP3またはM4Aファイルをアップロードしてください。")
+    else:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_extension}') as tmp_input:
+            tmp_input.write(uploaded_file.getvalue())
+            input_file_path = tmp_input.name
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
-        wav_file_path = tmp_wav.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
+            wav_file_path = tmp_wav.name
 
-    # 処理中メッセージ
-    st.markdown("<h2 style='text-align:center;'>ファイルを処理中です…</h2>", unsafe_allow_html=True)
-    progress_bar = st.progress(0)
+        # 処理中メッセージ
+        st.markdown("<h2 style='text-align:center;'>ファイルを処理中です…</h2>", unsafe_allow_html=True)
+        progress_bar = st.progress(0)
 
-    # 処理時間を記録する辞書
-    timing = {}
+        # 処理時間を記録する辞書
+        timing = {}
 
-    # 入力ファイルからWAVへの変換
-    start_time = time.perf_counter()
-    progress_bar.progress(10)
-    if convert_to_wav(input_file_path, wav_file_path):
-        end_time = time.perf_counter()
-        timing['ファイル変換 (WAV)'] = end_time - start_time
-        progress_bar.progress(20)
-        try:
-            # 音声分割
-            start_time = time.perf_counter()
-            chunks = split_audio_to_chunks(wav_file_path, chunk_length_ms=50000)  # 50秒単位で分割
+        # 入力ファイルからWAVへの変換
+        start_time = time.perf_counter()
+        progress_bar.progress(10)
+        if convert_to_wav(input_file_path, wav_file_path):
             end_time = time.perf_counter()
-            timing['音声分割'] = end_time - start_time
-            progress_bar.progress(30)
+            timing['ファイル変換 (WAV)'] = end_time - start_time
+            progress_bar.progress(20)
+            try:
+                # 音声分割
+                start_time = time.perf_counter()
+                chunks = split_audio_to_chunks(wav_file_path, chunk_length_ms=50000)  # 50秒単位で分割
+                end_time = time.perf_counter()
+                timing['音声分割'] = end_time - start_time
+                progress_bar.progress(30)
 
-            # 並列処理で文字起こし
-            start_time = time.perf_counter()
-            transcripts = []
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = [executor.submit(transcribe_chunk, chunk) for chunk in chunks]
-                for i, future in enumerate(as_completed(futures), start=1):
-                    result = future.result()
-                    transcripts.append(result)
-                    # 進捗を更新 (最大30→80程度に分配)
-                    current_progress = 30 + int((i / len(chunks)) * 50)
-                    progress_bar.progress(min(current_progress, 80))
+                # 並列処理で文字起こし
+                start_time = time.perf_counter()
+                transcripts = []
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    futures = [executor.submit(transcribe_chunk, chunk) for chunk in chunks]
+                    for i, future in enumerate(as_completed(futures), start=1):
+                        result = future.result()
+                        transcripts.append(result)
+                        # 進捗を更新 (最大30→80程度に分配)
+                        current_progress = 30 + int((i / len(chunks)) * 50)
+                        progress_bar.progress(min(current_progress, 80))
 
-            full_transcript = "\n".join(transcripts)
-            end_time = time.perf_counter()
-            timing['音声の文字起こし(分割並列)'] = end_time - start_time
+                full_transcript = "\n".join(transcripts)
+                end_time = time.perf_counter()
+                timing['音声の文字起こし(分割並列)'] = end_time - start_time
 
-            progress_bar.progress(85)
-            # OpenAI APIで話題分類
-            start_time = time.perf_counter()
-            # プロンプトに「情報がない場合は必ず'記載なし'と書くこと」を明示
-            response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
-                    {
-                        "role": "user",
-                        "content":
-                        """
+                progress_bar.progress(85)
+                # OpenAI APIで話題分類
+                start_time = time.perf_counter()
+                # プロンプトに「情報がない場合は必ず'記載なし'と書くこと」を明示
+                response = openai.ChatCompletion.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
+                        {
+                            "role": "user",
+                            "content":
+                            """
 最下部に述べる音声記録を参考に、以下の手順でテキストの要約と内容整理を行ってください。
 
 1. **要約作成**
@@ -286,42 +294,42 @@ _____________________________________________________________
 # Notes
 情報がない場合は必ず'記載なし'と記入すること。
 """
-                    },
-                    {"role": "user", "content": full_transcript}
-                ]
-            )
-            topic_content = response['choices'][0]['message']['content'].strip()
-            end_time = time.perf_counter()
-            timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
+                        },
+                        {"role": "user", "content": full_transcript}
+                    ]
+                )
+                topic_content = response['choices'][0]['message']['content'].strip()
+                end_time = time.perf_counter()
+                timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
 
-            progress_bar.progress(100)
+                progress_bar.progress(100)
 
-            # 結果の表示
-            st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
+                # 結果の表示
+                st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
 
-            # GPTの出力を直接表示
-            st.markdown("### GPTの出力")
-            st.markdown(f"<div style='padding:10px; font-size:1.2em; white-space: pre-wrap;'>{topic_content}</div>", unsafe_allow_html=True)
+                # GPTの出力を直接表示
+                st.markdown("### GPTの出力")
+                st.markdown(f"<div style='padding:10px; font-size:1.2em; white-space: pre-wrap;'>{topic_content}</div>", unsafe_allow_html=True)
 
-            # 処理時間の表示（必要に応じて保持）
-            st.markdown("### 処理時間")
-            timing_df = pd.DataFrame({
-                "ステップ": list(timing.keys()),
-                "所要時間 (秒)": [f"{v:.2f}" for v in timing.values()]
-            })
-            st.table(timing_df)
+                # 処理時間の表示（必要に応じて保持）
+                st.markdown("### 処理時間")
+                timing_df = pd.DataFrame({
+                    "ステップ": list(timing.keys()),
+                    "所要時間 (秒)": [f"{v:.2f}" for v in timing.values()]
+                })
+                st.table(timing_df)
 
+            except Exception as e:
+                st.error(f"処理に失敗しました: {e}")
+
+        # 一時ファイル削除
+        try:
+            os.remove(input_file_path)
+            os.remove(wav_file_path)
+            for chunk in locals().get('chunks', []):
+                try:
+                    os.remove(chunk)
+                except:
+                    pass
         except Exception as e:
-            st.error(f"処理に失敗しました: {e}")
-
-    # 一時ファイル削除
-    try:
-        os.remove(input_file_path)
-        os.remove(wav_file_path)
-        for chunk in locals().get('chunks', []):
-            try:
-                os.remove(chunk)
-            except:
-                pass
-    except Exception as e:
-        st.warning(f"一時ファイルの削除に失敗しました: {e}")
+            st.warning(f"一時ファイルの削除に失敗しました: {e}")
