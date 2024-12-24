@@ -1,5 +1,4 @@
 import os
-import wave
 import json
 import streamlit as st
 from google.cloud import speech
@@ -11,6 +10,7 @@ import time
 import re
 from pydub import AudioSegment
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from io import BytesIO
 
 # CSSのスタイル設定
 st.markdown("""
@@ -69,46 +69,51 @@ with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as cred
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 
 # オーディオファイルからWAVへの変換関数
-def convert_to_wav(input_file_path, output_file_path):
+def convert_to_wav(input_bytes, output_file_path):
     try:
-        # ffmpegを使用して入力ファイルをWAVに変換
+        # ffmpegを使用して入力バイトデータをWAVに変換
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.input') as tmp_input:
+            tmp_input.write(input_bytes)
+            tmp_input_path = tmp_input.name
         subprocess.run([
-            'ffmpeg', '-y', '-i', input_file_path,
+            'ffmpeg', '-y', '-i', tmp_input_path,
             '-ar', '16000', '-ac', '1', output_file_path
         ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        os.remove(tmp_input_path)
     except subprocess.CalledProcessError as e:
         st.error(f"ffmpegの変換に失敗しました: {e}")
         return False
     return True
 
-# WAVファイルを分割する関数
+# WAVファイルを分割する関数（メモリ内で処理）
 def split_audio_to_chunks(wav_file_path, chunk_length_ms=50000):
     audio = AudioSegment.from_wav(wav_file_path)
     chunks = []
     for i in range(0, len(audio), chunk_length_ms):
         chunk = audio[i:i+chunk_length_ms]
-        # 一時ファイルとして保存
-        tmp_chunk = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
-        chunk.export(tmp_chunk.name, format="wav")
-        chunks.append(tmp_chunk.name)
+        chunks.append(chunk)
     return chunks
 
 # Google Speech-to-Textで文字起こしを行う関数（各チャンク用）
-def transcribe_chunk(chunk_path, language_code='ja-JP'):
-    client = speech.SpeechClient()
-    with open(chunk_path, 'rb') as f:
-        content = f.read()
-    audio = speech.RecognitionAudio(content=content)
-    config = speech.RecognitionConfig(
-        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=16000,
-        language_code=language_code
-    )
-    response = client.recognize(config=config, audio=audio)
-    transcript = ""
-    for result in response.results:
-        transcript += result.alternatives[0].transcript
-    return transcript
+def transcribe_chunk(chunk_audio, client, language_code='ja-JP'):
+    try:
+        with BytesIO() as wav_buffer:
+            chunk_audio.export(wav_buffer, format="wav")
+            wav_buffer.seek(0)
+            content = wav_buffer.read()
+        audio = speech.RecognitionAudio(content=content)
+        config = speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=16000,
+            language_code=language_code
+        )
+        response = client.recognize(config=config, audio=audio)
+        transcript = ""
+        for result in response.results:
+            transcript += result.alternatives[0].transcript
+        return transcript
+    except Exception as e:
+        return f"文字起こしに失敗しました: {e}"
 
 st.markdown("<h1 style='text-align:center;'>アセスメント補助ツール</h1>", unsafe_allow_html=True)
 
@@ -119,9 +124,8 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{uploaded_file.type.split("/")[1]}') as tmp_input:
-        tmp_input.write(uploaded_file.getvalue())
-        input_file_path = tmp_input.name
+    # ファイルデータをメモリに読み込む
+    input_bytes = uploaded_file.read()
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
         wav_file_path = tmp_wav.name
@@ -136,7 +140,7 @@ if uploaded_file is not None:
     # 入力ファイルからWAVへの変換
     start_time = time.perf_counter()
     progress_bar.progress(10)
-    if convert_to_wav(input_file_path, wav_file_path):
+    if convert_to_wav(input_bytes, wav_file_path):
         end_time = time.perf_counter()
         timing['ファイル変換 (WAV)'] = end_time - start_time
         progress_bar.progress(20)
@@ -148,11 +152,14 @@ if uploaded_file is not None:
             timing['音声分割'] = end_time - start_time
             progress_bar.progress(30)
 
+            # Google Speech-to-Text クライアントの再利用
+            client = speech.SpeechClient()
+
             # 並列処理で文字起こし
             start_time = time.perf_counter()
             transcripts = []
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = [executor.submit(transcribe_chunk, chunk) for chunk in chunks]
+            with ThreadPoolExecutor(max_workers=10) as executor:  # スレッド数を増加
+                futures = [executor.submit(transcribe_chunk, chunk, client) for chunk in chunks]
                 for i, future in enumerate(as_completed(futures), start=1):
                     result = future.result()
                     transcripts.append(result)
@@ -162,14 +169,14 @@ if uploaded_file is not None:
 
             full_transcript = "\n".join(transcripts)
             end_time = time.perf_counter()
-            timing['音声の文字起こし(分割並列)'] = end_time - start_time
+            timing['音声の文字起こし(並列)'] = end_time - start_time
 
             progress_bar.progress(85)
             # OpenAI APIで話題分類
             start_time = time.perf_counter()
             # プロンプトに「情報がない場合は必ず'記載なし'と書くこと」を明示
             response = openai.ChatCompletion.create(
-                model="gpt-4o",
+                model="gpt-4",
                 messages=[
                     {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
                     {
@@ -180,6 +187,7 @@ if uploaded_file is not None:
 
 1. **要約作成**
    - 文章全体の中から重要な内容を抽出し、簡潔に要約します。
+   - 情報がない場合は必ず'記載なし'と書いてください。
 
 2. **話題の項目と内容の整理**
    - 要約した内容を更に分解し、話題に合わせた項目とその具体的な内容を整理して提示してください。
@@ -188,7 +196,7 @@ if uploaded_file is not None:
 
 下記の項目のうち、音声記録に上がった項目を分類してください。
 音声記録の内容から漏れの無いようにしなさい。
-ただし音声記録の文脈や雰囲気から予測できる項目の内容があれば記載しなさい。その際、内容には「○○という会話から○○と予測されます。」のような形で記載しなさい。
+ただし音声記録の文脈や雰囲気から予測できる項目の内容があれば記載しなさい。
 なるべく記載なしの項目が少なくなることが望ましいです。ただし、音声データに含まれないことや、音声データから予測できないことは、'記載なし'と明記してください。
 
 例：
@@ -294,7 +302,7 @@ _____________________________________________________________
 
 # Notes
 情報がない場合は必ず'記載なし'と記入すること。
-"""
+                        """
                     },
                     {"role": "user", "content": full_transcript}
                 ]
@@ -325,12 +333,6 @@ _____________________________________________________________
 
     # 一時ファイル削除
     try:
-        os.remove(input_file_path)
         os.remove(wav_file_path)
-        for chunk in locals().get('chunks', []):
-            try:
-                os.remove(chunk)
-            except:
-                pass
     except Exception as e:
         st.warning(f"一時ファイルの削除に失敗しました: {e}")
