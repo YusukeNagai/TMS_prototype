@@ -44,6 +44,19 @@ div[data-testid="stFileUploader"]:hover {
     background-color: #eee;
     border-color: #aaa;
 }
+/* デフォルトのドラッグ＆ドロップテキストを非表示に */
+div[data-testid="stFileUploadDropzone"] > div:nth-child(2) {
+    display: none;
+}
+/* 独自のテキストを表示 */
+div[data-testid="stFileUploadDropzone"]::before {
+    content: "MP3またはM4Aファイルをドラッグ＆ドロップするか、クリックして選択してください。";
+    display: block;
+    text-align: center;
+    font-size: 1.5em;
+    color: #333;
+    padding: 20px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -97,10 +110,13 @@ def transcribe_chunk(chunk_path, language_code='ja-JP'):
         transcript += result.alternatives[0].transcript
     return transcript
 
-st.markdown("<h1 style='text-align:center;'>音声ファイル処理と話題分類</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;'>MP3またはM4Aファイルを以下にドラッグ＆ドロップまたはクリックして選択してください。</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;'>アセスメント補助ツール</h1>", unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("", type=["mp3", "m4a"])
+# ファイルアップロード部分を日本語化
+uploaded_file = st.file_uploader(
+    "MP3またはM4Aファイルをドラッグ＆ドロップするか、クリックして選択してください。",
+    type=["mp3", "m4a"]
+)
 
 if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{uploaded_file.type.split("/")[1]}') as tmp_input:
@@ -153,7 +169,7 @@ if uploaded_file is not None:
             start_time = time.perf_counter()
             # プロンプトに「情報がない場合は必ず'記載なし'と書くこと」を明示
             response = openai.ChatCompletion.create(
-                model="gpt-4o",
+                model="gpt-4",
                 messages=[
                     {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
                     {
@@ -276,7 +292,7 @@ _____________________________________________________________
             )
             topic_content = response['choices'][0]['message']['content'].strip()
             end_time = time.perf_counter()
-            timing['話題分類 (OpenAI GPT-4o)'] = end_time - start_time
+            timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
 
             progress_bar.progress(100)
 
