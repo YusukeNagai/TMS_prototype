@@ -299,9 +299,6 @@ _____________________________________________________________
 要約: 田中さんは～
 コミュニケーション 視力：記載なし
 ...
-
-# Notes
-情報がない場合は必ず'記載なし'と記入すること。
                         """
                     },
                     {"role": "user", "content": full_transcript}
@@ -309,7 +306,7 @@ _____________________________________________________________
             )
             topic_content = response['choices'][0]['message']['content'].strip()
             end_time = time.perf_counter()
-            timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
+            timing['話題分類 (OpenAI GPT-4o)'] = end_time - start_time
 
             progress_bar.progress(100)
 
