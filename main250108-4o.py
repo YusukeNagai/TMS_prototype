@@ -104,14 +104,43 @@ with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as cred
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 
 # オーディオファイルからWAVへの変換関数
-def convert_to_wav(input_audio: AudioSegment, output_file_path):
+def convert_to_wav(input_bytes, output_file_path):
     try:
-        # サンプルレートとチャンネル数を設定してWAV形式に変換
-        input_audio.set_frame_rate(16000).set_channels(1).export(output_file_path, format="wav")
-    except Exception as e:
-        st.error(f"WAVへの変換に失敗しました: {e}")
+        # ffmpegを使用して入力バイトデータをWAVに変換
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.input') as tmp_input:
+            tmp_input.write(input_bytes)
+            tmp_input_path = tmp_input.name
+        subprocess.run([
+            'ffmpeg', '-y', '-i', tmp_input_path,
+            '-ar', '16000', '-ac', '1', output_file_path
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        os.remove(tmp_input_path)
+    except subprocess.CalledProcessError as e:
+        st.error(f"ffmpegの変換に失敗しました: {e}")
         return False
     return True
+
+# 複数ファイルを結合する関数
+def concatenate_audio_files(uploaded_files):
+    try:
+        combined = AudioSegment.empty()
+        for file in uploaded_files:
+            audio = AudioSegment.from_file(BytesIO(file.read()), format=file.type.split('/')[-1])
+            combined += audio
+        return combined
+    except Exception as e:
+        st.error(f"ファイルの結合に失敗しました: {e}")
+        return None
+
+# WAVファイルを一時ファイルに保存する関数
+def save_audio_segment(audio_segment):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
+            audio_segment.export(tmp_wav.name, format="wav")
+            return tmp_wav.name
+    except Exception as e:
+        st.error(f"WAVファイルの保存に失敗しました: {e}")
+        return None
 
 # WAVファイルを分割する関数（メモリ内で処理）
 def split_audio_to_chunks(wav_file_path, chunk_length_ms=50000):
@@ -145,56 +174,36 @@ def transcribe_chunk(chunk_audio, client, language_code='ja-JP'):
 
 st.markdown("<h1 style='text-align:center;'>アセスメント補助ツール</h1>", unsafe_allow_html=True)
 
-# ファイルアップロード部分を日本語化し、複数ファイルのアップロードを許可
+# ファイルアップロード部分を日本語化し、複数ファイルに対応
 uploaded_files = st.file_uploader(
     "MP3またはM4Aファイルをドラッグ＆ドロップするか、クリックして選択してください。",
     type=["mp3", "m4a"],
-    accept_multiple_files=True
+    accept_multiple_files=True  # 複数ファイルのアップロードを許可
 )
 
 if uploaded_files:
-    if len(uploaded_files) > 3:
-        st.warning("最大3つのファイルまでアップロードできます。最初の3つのファイルを使用します。")
-        uploaded_files = uploaded_files[:3]
-    
-    # 個別の音声ファイルの再生
-    st.markdown("### アップロードした音声ファイル")
-    for idx, uploaded_file in enumerate(uploaded_files, start=1):
-        st.markdown(f"#### 音声ファイル {idx}")
-        file_bytes = uploaded_file.read()
-        st.audio(file_bytes, format=uploaded_file.type)
-        uploaded_file.seek(0)  # ファイルポインタをリセット
-    
-    # 音声ファイルを結合
-    st.markdown("### 音声ファイルの結合")
-    combined_audio = AudioSegment.empty()
-    for uploaded_file in uploaded_files:
-        uploaded_file.seek(0)  # ファイルポインタを先頭に戻す
-        file_extension = uploaded_file.name.split('.')[-1].lower()
-        try:
-            audio = AudioSegment.from_file(uploaded_file, format=file_extension)
-            combined_audio += audio
-        except pydub.exceptions.CouldntDecodeError:
-            st.error(f"ファイル {uploaded_file.name} のデコードに失敗しました。正しいフォーマットのファイルをアップロードしてください。")
-            st.stop()
-        except Exception as e:
-            st.error(f"ファイル {uploaded_file.name} の処理中にエラーが発生しました: {e}")
-            st.stop()
-    
-    combined_audio_io = BytesIO()
-    combined_audio.export(combined_audio_io, format="mp3")
-    combined_audio_bytes = combined_audio_io.getvalue()
-    
-    # 結合後の音声ファイルの再生
-    st.audio(combined_audio_bytes, format="audio/mp3")
-    
-    # 一時ファイルに保存
+    if len(uploaded_files) == 1:
+        st.markdown("### アップロードした音声ファイル")
+        st.audio(uploaded_files[0].read(), format=uploaded_files[0].type)
+    else:
+        st.markdown(f"### アップロードした{len(uploaded_files)}ファイル")
+        for idx, file in enumerate(uploaded_files, start=1):
+            st.audio(file.read(), format=file.type, start_time=0, key=f"audio_{idx}")
+
+    with st.spinner("音声ファイルを結合中..."):
+        # ファイルの結合
+        combined_audio = concatenate_audio_files(uploaded_files)
+        if combined_audio is None:
+            st.stop()  # 結合に失敗した場合は処理を中断
+
+        # 結合後の音声をWAVファイルとして保存
+        combined_wav_path = save_audio_segment(combined_audio)
+        if combined_wav_path is None:
+            st.stop()  # 保存に失敗した場合は処理を中断
+
     with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
-        wav_file_path = tmp_wav.name
-        if not convert_to_wav(combined_audio, wav_file_path):
-            st.error("音声ファイルのWAV変換に失敗しました。処理を中止します。")
-            st.stop()
-    
+        wav_file_path = combined_wav_path
+
     # 処理中メッセージと進捗バー
     st.markdown("<h2 style='text-align:center;'>ファイルを処理中です…</h2>", unsafe_allow_html=True)
     progress_bar = st.progress(0)
@@ -204,10 +213,14 @@ if uploaded_files:
     timing = {}
 
     try:
-        # 入力ファイルからWAVへの変換は既に完了
+        # 入力ファイルからWAVへの変換（既に結合しているためスキップ）
+        start_time = time.perf_counter()
+        status_text.text("ステップ 1/5: WAV形式への変換中...")
         progress_bar.progress(10)
-        timing['ファイル変換 (WAV)'] = 0  # 既に変換済みなので0秒とする
-        
+        # 変換は既に完了しているためスキップ
+        timing['ファイル結合およびWAV変換'] = time.perf_counter() - start_time
+        progress_bar.progress(20)
+
         # 音声分割
         start_time = time.perf_counter()
         status_text.text("ステップ 2/5: 音声を分割中...")
@@ -247,15 +260,14 @@ if uploaded_files:
         # OpenAI APIで話題分類
         start_time = time.perf_counter()
         # プロンプトに「情報がない場合は必ず'記載なし'と書くこと」を明示
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4",  # 正しいモデル名に修正
-                messages=[
-                    {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
-                    {
-                        "role": "user",
-                        "content":
-                        f"""
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # 正しいモデル名に修正
+            messages=[
+                {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
+                {
+                    "role": "user",
+                    "content":
+                    f"""
 最下部に述べる音声記録を参考に、以下の手順でテキストの要約と内容整理を行ってください。
 
 1. **要約作成**
@@ -338,95 +350,4 @@ _____________________________________________________________
   対人交流：
   特記事項：
  8. その他留意すべき事項
-  虐待の可能性、経済的困窮、医療依存度、趣味や得意なことなどを記載。
-  問題（困りごと）
-  利用者の困りごと：
-  家族の困りごと：
-  意向・意見・判断
-  利用者意向：
-  家族意向：
-  医師・専門職等意見：
-  CM判断：
-  解決すべき課題（ニーズ）
-  整理前：
-  関連：
-  整理後：
-  優先順位：
-  気づき：
-
-# 出力形式
-
-- 各要約と項目の内容は漏れが無いように、丁寧な文でまとめてください。
-- 形式例:
- 要約: [該当内容]
- ...
-
-# 例
-
-**入力**
-こんにちは、田中さん～
-
-**出力**
-要約: 田中さんは～
-コミュニケーション 視力：A
-...
-                            """
-                    },
-                    {"role": "user", "content": full_transcript}
-                ]  # ここで ']' を閉じる
-            )  # create() 関数を閉じる
-            topic_content = response['choices'][0]['message']['content'].strip()
-            end_time = time.perf_counter()
-            timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
-
-            progress_bar.progress(100)
-            status_text.text("ステップ 5/5: 処理完了しました。")
-
-            # 結果の表示
-            st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
-
-            # GPTの出力を常に表示
-            st.markdown("### GPTの出力")
-            st.markdown(f"<div style='padding:10px; font-size:1.2em; white-space: pre-wrap;'>{topic_content}</div>", unsafe_allow_html=True)
-
-            # 結果のダウンロード
-            st.markdown("### 結果のダウンロード")
-            topic_bytes = topic_content.encode('utf-8')
-            st.download_button(
-                label="GPTの出力をダウンロード",
-                data=topic_bytes,
-                file_name="topic_content.txt",
-                mime="text/plain"
-            )
-
-            # 処理時間の表示を折りたたみ可能なセクションに変更
-            with st.expander("処理時間を表示"):
-                st.markdown("### 処理時間")
-                timing_df = pd.DataFrame({
-                    "ステップ": list(timing.keys()),
-                    "所要時間 (秒)": [f"{v:.2f}" for v in timing.values()]
-                })
-                st.table(timing_df)
-
-                # 処理時間のダウンロード
-                timing_csv = timing_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="処理時間をCSVでダウンロード",
-                    data=timing_csv,
-                    file_name="processing_time.csv",
-                    mime="text/csv"
-                )
-
-    except Exception as e:
-        st.error(f"処理に失敗しました: {e}")
-
-    finally:
-        # 一時ファイル削除
-        try:
-            os.remove(wav_file_path)
-        except Exception as e:
-            st.warning(f"一時ファイルの削除に失敗しました: {e}")
-
-    # リセットボタン
-    if st.button("新しいファイルをアップロードする"):
-        st.experimental_rerun()
+  虐待の可能性、経済的困窮、医療依存度、趣
