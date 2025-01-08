@@ -161,15 +161,24 @@ if uploaded_files:
     st.markdown("### アップロードした音声ファイル")
     for idx, uploaded_file in enumerate(uploaded_files, start=1):
         st.markdown(f"#### 音声ファイル {idx}")
-        st.audio(uploaded_file.read(), format=uploaded_file.type)
+        file_bytes = uploaded_file.read()
+        st.audio(file_bytes, format=uploaded_file.type)
     
     # 音声ファイルを結合
     st.markdown("### 音声ファイルの結合")
     combined_audio = AudioSegment.empty()
     for uploaded_file in uploaded_files:
         uploaded_file.seek(0)  # ファイルポインタを先頭に戻す
-        audio = AudioSegment.from_file(uploaded_file, format=uploaded_file.type.split('/')[1])
-        combined_audio += audio
+        file_extension = uploaded_file.name.split('.')[-1].lower()
+        try:
+            audio = AudioSegment.from_file(uploaded_file, format=file_extension)
+            combined_audio += audio
+        except pydub.exceptions.CouldntDecodeError as e:
+            st.error(f"ファイル {uploaded_file.name} のデコードに失敗しました。正しいフォーマットのファイルをアップロードしてください。")
+            st.stop()
+        except Exception as e:
+            st.error(f"ファイル {uploaded_file.name} の処理中にエラーが発生しました: {e}")
+            st.stop()
     combined_audio_io = BytesIO()
     combined_audio.export(combined_audio_io, format="mp3")
     combined_audio_bytes = combined_audio_io.getvalue()
