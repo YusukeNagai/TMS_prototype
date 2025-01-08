@@ -372,7 +372,7 @@ _____________________________________________________________
 ...
                             """
                     },
-                    {"role": "user", "content": "full_transcript"}
+                    {"role": "user", "content": full_transcript}
                 ]  # ここで ']' を閉じる
             )  # create() 関数を閉じる
             topic_content = response['choices'][0]['message']['content'].strip()
