@@ -247,14 +247,14 @@ if uploaded_files:
         # OpenAI APIで話題分類
         start_time = time.perf_counter()
         # プロンプトに「情報がない場合は必ず'記載なし'と書くこと」を明示
-    response = openai.ChatCompletion.create(
-        model="gpt-4",  # 正しいモデル名に修正
-        messages=[
-            {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
-            {
-                "role": "user",
-                "content":
-                f"""
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # 正しいモデル名に修正
+            messages=[
+                {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
+                {
+                    "role": "user",
+                    "content":
+                    f"""
 最下部に述べる音声記録を参考に、以下の手順でテキストの要約と内容整理を行ってください。
 
 1. **要約作成**
@@ -369,7 +369,7 @@ _____________________________________________________________
 要約: 田中さんは～
 コミュニケーション 視力：A
 ...
-                        """
+                    """
             },
             {"role": "user", "content": full_transcript}
         ]  # ここで ']' を閉じる
