@@ -247,14 +247,14 @@ if uploaded_files:
         # OpenAI APIで話題分類
         start_time = time.perf_counter()
         # プロンプトに「情報がない場合は必ず'記載なし'と書くこと」を明示
-            response = openai.ChatCompletion.create(
-                model="gpt-4o",  # 正しいモデル名に修正
-                messages=[
-                    {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
-                    {
-                        "role": "user",
-                        "content":
-                        f"""
+    response = openai.ChatCompletion.create(
+        model="gpt-4",  # 正しいモデル名に修正
+        messages=[
+            {"role": "system", "content": "あなたは介護領域における幅広い専門知識を持つアシスタントです。特にケアマネジャー向けの情報に関して専門的な回答を提供できます。情報がない場合は必ず'記載なし'と記してください。"},
+            {
+                "role": "user",
+                "content":
+                f"""
 最下部に述べる音声記録を参考に、以下の手順でテキストの要約と内容整理を行ってください。
 
 1. **要約作成**
@@ -370,61 +370,61 @@ _____________________________________________________________
 コミュニケーション 視力：A
 ...
                         """
-                },
-                {"role": "user", "content": full_transcript}
-            ]  # ここで ']' を閉じる
-        )  # create() 関数を閉じる
-        topic_content = response['choices'][0]['message']['content'].strip()
-        end_time = time.perf_counter()
-        timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
+            },
+            {"role": "user", "content": full_transcript}
+        ]  # ここで ']' を閉じる
+    )  # create() 関数を閉じる
+    topic_content = response['choices'][0]['message']['content'].strip()
+    end_time = time.perf_counter()
+    timing['話題分類 (OpenAI GPT-4)'] = end_time - start_time
 
-        progress_bar.progress(100)
-        status_text.text("ステップ 5/5: 処理完了しました。")
+    progress_bar.progress(100)
+    status_text.text("ステップ 5/5: 処理完了しました。")
 
-        # 結果の表示
-        st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
+    # 結果の表示
+    st.markdown("<h2 style='text-align:center;'>結果</h2>", unsafe_allow_html=True)
 
-        # GPTの出力を常に表示
-        st.markdown("### GPTの出力")
-        st.markdown(f"<div style='padding:10px; font-size:1.2em; white-space: pre-wrap;'>{topic_content}</div>", unsafe_allow_html=True)
+    # GPTの出力を常に表示
+    st.markdown("### GPTの出力")
+    st.markdown(f"<div style='padding:10px; font-size:1.2em; white-space: pre-wrap;'>{topic_content}</div>", unsafe_allow_html=True)
 
-        # 結果のダウンロード
-        st.markdown("### 結果のダウンロード")
-        topic_bytes = topic_content.encode('utf-8')
+    # 結果のダウンロード
+    st.markdown("### 結果のダウンロード")
+    topic_bytes = topic_content.encode('utf-8')
+    st.download_button(
+        label="GPTの出力をダウンロード",
+        data=topic_bytes,
+        file_name="topic_content.txt",
+        mime="text/plain"
+    )
+
+    # 処理時間の表示を折りたたみ可能なセクションに変更
+    with st.expander("処理時間を表示"):
+        st.markdown("### 処理時間")
+        timing_df = pd.DataFrame({
+            "ステップ": list(timing.keys()),
+            "所要時間 (秒)": [f"{v:.2f}" for v in timing.values()]
+        })
+        st.table(timing_df)
+
+        # 処理時間のダウンロード
+        timing_csv = timing_df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="GPTの出力をダウンロード",
-            data=topic_bytes,
-            file_name="topic_content.txt",
-            mime="text/plain"
+            label="処理時間をCSVでダウンロード",
+            data=timing_csv,
+            file_name="processing_time.csv",
+            mime="text/csv"
         )
 
-        # 処理時間の表示を折りたたみ可能なセクションに変更
-        with st.expander("処理時間を表示"):
-            st.markdown("### 処理時間")
-            timing_df = pd.DataFrame({
-                "ステップ": list(timing.keys()),
-                "所要時間 (秒)": [f"{v:.2f}" for v in timing.values()]
-            })
-            st.table(timing_df)
+except Exception as e:
+    st.error(f"処理に失敗しました: {e}")
 
-            # 処理時間のダウンロード
-            timing_csv = timing_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="処理時間をCSVでダウンロード",
-                data=timing_csv,
-                file_name="processing_time.csv",
-                mime="text/csv"
-            )
+# 一時ファイル削除
+try:
+    os.remove(wav_file_path)
+except Exception as e:
+    st.warning(f"一時ファイルの削除に失敗しました: {e}")
 
-    except Exception as e:
-        st.error(f"処理に失敗しました: {e}")
-
-    # 一時ファイル削除
-    try:
-        os.remove(wav_file_path)
-    except Exception as e:
-        st.warning(f"一時ファイルの削除に失敗しました: {e}")
-
-    # リセットボタン
-    if st.button("新しいファイルをアップロードする"):
-        st.experimental_rerun()
+# リセットボタン
+if st.button("新しいファイルをアップロードする"):
+    st.experimental_rerun()
