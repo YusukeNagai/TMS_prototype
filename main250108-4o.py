@@ -106,8 +106,8 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials_path
 # オーディオファイルからWAVへの変換関数
 def convert_to_wav(input_audio: AudioSegment, output_file_path):
     try:
-        # エクスポートする際にWAV形式に変換
-        input_audio.export(output_file_path, format="wav", rate=16000, channels=1)
+        # サンプルレートとチャンネル数を設定してWAV形式に変換
+        input_audio.set_frame_rate(16000).set_channels(1).export(output_file_path, format="wav")
     except Exception as e:
         st.error(f"WAVへの変換に失敗しました: {e}")
         return False
@@ -163,6 +163,7 @@ if uploaded_files:
         st.markdown(f"#### 音声ファイル {idx}")
         file_bytes = uploaded_file.read()
         st.audio(file_bytes, format=uploaded_file.type)
+        uploaded_file.seek(0)  # ファイルポインタをリセット
     
     # 音声ファイルを結合
     st.markdown("### 音声ファイルの結合")
@@ -173,12 +174,13 @@ if uploaded_files:
         try:
             audio = AudioSegment.from_file(uploaded_file, format=file_extension)
             combined_audio += audio
-        except pydub.exceptions.CouldntDecodeError as e:
+        except pydub.exceptions.CouldntDecodeError:
             st.error(f"ファイル {uploaded_file.name} のデコードに失敗しました。正しいフォーマットのファイルをアップロードしてください。")
             st.stop()
         except Exception as e:
             st.error(f"ファイル {uploaded_file.name} の処理中にエラーが発生しました: {e}")
             st.stop()
+    
     combined_audio_io = BytesIO()
     combined_audio.export(combined_audio_io, format="mp3")
     combined_audio_bytes = combined_audio_io.getvalue()
