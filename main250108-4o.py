@@ -420,11 +420,12 @@ _____________________________________________________________
     except Exception as e:
         st.error(f"処理に失敗しました: {e}")
 
-    # 一時ファイル削除
-    try:
-        os.remove(wav_file_path)
-    except Exception as e:
-        st.warning(f"一時ファイルの削除に失敗しました: {e}")
+    finally:
+        # 一時ファイル削除
+        try:
+            os.remove(wav_file_path)
+        except Exception as e:
+            st.warning(f"一時ファイルの削除に失敗しました: {e}")
 
     # リセットボタン
     if st.button("新しいファイルをアップロードする"):
