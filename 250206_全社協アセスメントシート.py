@@ -14,7 +14,7 @@ from io import BytesIO
 
 # ページ設定: サイドバーをデフォルトで閉じた状態にする
 st.set_page_config(
-    page_title="アセスメント補助ツールver沖縄式アセスメントシート",
+    page_title="アセスメント補助ツールver全社協アセスメントシート",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
