@@ -143,7 +143,7 @@ def transcribe_chunk(chunk_audio, client, language_code='ja-JP'):
     except Exception as e:
         return f"文字起こしに失敗しました: {e}"
 
-st.markdown("<h1 style='text-align:center;'>アセスメント補助ツール</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;'>アセスメント補助ツール(全社協アセスメントシート)</h1>", unsafe_allow_html=True)
 
 # ファイルアップロード部分を日本語化（複数ファイル対応に変更）
 uploaded_files = st.file_uploader(
